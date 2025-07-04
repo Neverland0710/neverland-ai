@@ -1,0 +1,48 @@
+# FastAPI 및 웹 프레임워크
+fastapi
+uvicorn[standard]
+python-multipart
+
+# 웹소켓 및 HTTP 클라이언트
+websockets==
+aiohttp
+httpx
+
+# LangChain 및 AI
+langchain
+langchain-openai
+langchain-qdrant
+langchain-core
+langchain-community
+openai
+
+# 데이터베이스
+sqlalchemy
+pymysql
+aiomysql
+
+# 설정 및 환경변수
+pydantic
+pydantic-settings
+python-dotenv
+
+# 스케줄링 및 캐싱
+apscheduler
+redis
+
+# 파일 처리
+aiofiles
+pillow
+
+# 유틸리티
+uuid
+
+# 개발 및 테스트 도구 (선택적)
+pytest
+pytest-asyncio
+black
+isort
+
+# 로깅
+structlog
+rich
