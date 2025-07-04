@@ -106,7 +106,7 @@ class AdvancedRAGService:
             filtered = [r for r in results if r["metadata"].get("authKeyId") == authKeyId]
             logger.info(f"🔐 authKeyId 필터 후: {len(filtered)}개")
 
-            RELEVANCE_THRESHOLD = 0.3  # 0.3 → 0.1로 낮춤
+            RELEVANCE_THRESHOLD = 0.3  
             relevant = [
                 r for r in filtered
                 if r["score"] is not None and r["score"] >= RELEVANCE_THRESHOLD

@@ -26,4 +26,4 @@ async def process_letter(request: LetterRequest):
 
     except Exception as e:
         logger.error(f"❌ 편지 처리 API 오류: {e}")
-        raise HTTPException(status_code=500, detail="편지 처리 중 오류가 발생했습니다.")
+        raise HTTPException(status_code=500, detail="편지 처리 중 오류가 발생했습니다.")    
