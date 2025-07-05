@@ -208,7 +208,7 @@ class ChatChain:
                 "user_id": user_id,
                 "authKeyId": authKeyId,
                 "previous_analysis": self._get_last_analysis(authKeyId)
-            }
+            }   
 
             if not skip_rag:
                 input_data["memories"] = await self._search_memories(input_data)
