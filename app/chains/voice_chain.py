@@ -104,6 +104,8 @@ class VoiceResponseParser:
             "ㅋㅋ": "",
             "ㅎㅎ": "",
             "ㅠㅠ": "",
+            "~" : "",
+            ".": "",
         }
         for bad, good in replacements.items():
             response = response.replace(bad, good)
