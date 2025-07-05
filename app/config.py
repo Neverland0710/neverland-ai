@@ -33,9 +33,6 @@ class Settings(BaseSettings):
     langsmith_endpoint: Optional[str] = "https://api.smith.langchain.com"
     langsmith_api_key: Optional[str] = None
     langsmith_project: Optional[str] = "default"
-
-    # Redis
-    redis_url: str = "redis://localhost:6379"
     
     # Voice Service Settings
     voice_audio_dir: str = "static/audio"
