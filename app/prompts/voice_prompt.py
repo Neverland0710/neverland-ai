@@ -138,13 +138,3 @@ class VoicePrompts:
 
 음성 응답: [추억이 자연스럽게 녹아든 따뜻한 응답]
 """
-    @staticmethod
-    def should_skip_memory_search_by_content(query: str, messages: List) -> bool:
-        """
-        최근 대화 내용과 완전히 동일한 발화가 반복될 경우 메모리 검색 생략
-        """
-        if not query or not messages:
-            return False
-
-        recent = [m.content for m in messages[-5:] if hasattr(m, "content")]
-        return query.strip() in recent

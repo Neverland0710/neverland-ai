@@ -9,7 +9,7 @@ from langchain.schema.runnable import Runnable, RunnablePassthrough, RunnableLam
 from langchain.prompts import ChatPromptTemplate
 from langchain_core.chat_history import BaseChatMessageHistory
 from langchain_core.runnables.history import RunnableWithMessageHistory
-from langchain_core.messages import HumanMessage, AIMessage
+from langchain_core.messages import HumanMessage, AIMessage, BaseMessage
 from langsmith import traceable
 
 from app.config import settings
@@ -265,7 +265,7 @@ class VoiceChain:
             query = data["user_input"].strip()
             history = self._get_voice_session_history(data["authKeyId"])
 
-            if VoicePrompts.should_skip_memory_search_by_content(query, history.messages):
+            if self._should_skip_memory_search_by_content(query, history.messages):
                 logger.info("🎯 유사 대화 감지 - 메모리 검색 생략")
                 return []
 
@@ -305,6 +305,15 @@ class VoiceChain:
         except Exception as e:
             logger.error(f"❌ 메모리 검색 실패: {e}")
             return []
+
+    def _should_skip_memory_search_by_content(self, query: str, messages: List[BaseMessage]) -> bool:
+        if len(query.strip()) <= 2:
+            return True
+        if messages and isinstance(messages[-1], HumanMessage):
+            last = messages[-1].content.strip()
+            if last == query.strip():
+                return True
+        return False
 
     async def _get_deceased_info(self, data: Dict) -> Dict:
         return await database_service.get_deceased_by_auth_key(data["authKeyId"])
