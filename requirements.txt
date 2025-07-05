@@ -4,7 +4,7 @@ uvicorn[standard]
 python-multipart
 
 # 웹소켓 및 HTTP 클라이언트
-websockets==
+websockets
 aiohttp
 httpx
 

@@ -60,10 +60,6 @@ async def shutdown_event():
     scheduler_service.stop()
     await database_service.close()
 
-# 디렉토리 생성 후 정적 파일 마운트
-os.makedirs("static", exist_ok=True)
-os.makedirs("static/audio", exist_ok=True)
-
 # 라우터 등록
 app.include_router(chat.router, prefix="/api")
 app.include_router(letter.router, prefix="/api")
@@ -71,9 +67,6 @@ app.include_router(memory.router, prefix="/api")
 app.include_router(admin.router, prefix="/api")
 app.include_router(search.router, prefix="/api")
 app.include_router(voice_router, prefix="/api")   # 음성 API 추가
-
-# 정적 파일 서빙 (음성 파일용)
-app.mount("/static", StaticFiles(directory="static"), name="static")
 
 @app.get("/")
 async def root():

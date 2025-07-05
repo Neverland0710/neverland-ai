@@ -1,0 +1,18 @@
+
+services:
+  app:
+    container_name: neverland-ai
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    restart: always
+    networks:
+      - memorial-net
+
+networks:
+  memorial-net:
+    driver: bridge
