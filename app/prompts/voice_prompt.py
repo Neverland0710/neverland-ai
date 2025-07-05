@@ -62,7 +62,7 @@ class VoicePrompts:
 🕰️ 최근 대화 흐름:
 {conversation_history}
 
-📡 현재 분위기: {emotion_tone}
+📡 현재 분위기: {voice_emotion}
 
 📌 최종 출력 형식:
 응답 내용 | 분위기 분석 요약 | 위험도: LOW/HIGH
