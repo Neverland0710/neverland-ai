@@ -156,7 +156,7 @@ class ChatChain:
             self.session_histories[session_id] = DatabaseChatMessageHistory(session_id)
         return self.session_histories[session_id]
 
-    def _get_recent_text_messages(self, history: DatabaseChatMessageHistory, limit: int = 5) -> str:
+    def _get_recent_text_messages(self, history: DatabaseChatMessageHistory, limit: int = 10) -> str:
         messages = history.messages[-limit:] if history else []
         text = []
         for m in messages:
@@ -180,12 +180,27 @@ class ChatChain:
                 return msg.content.split("|")[-1].strip()
         return ""
 
+    def _should_skip_memory_search_by_content(self, user_input: str, history: DatabaseChatMessageHistory) -> bool:
+        """최근 응답 내용에 유사한 기억 내용이 포함되어 있는지 판단"""
+        recent_ai_msgs = [m.content.lower() for m in reversed(history.messages[-50:]) if isinstance(m, AIMessage)]
+        user_keywords = set(user_input.lower().split())
+
+        for msg in recent_ai_msgs:
+            msg_words = set(msg.split())
+            overlap = user_keywords & msg_words
+            if len(overlap) / max(len(user_keywords), 1) >= 0.6:
+                logger.info("🧠 최근 응답과 유사한 내용 발견 → 기억 검색 생략")
+                return True
+        return False
+
     @traceable(name="generate_response")
     async def generate_response(self, user_input: str, user_id: str, authKeyId: str) -> Dict:
         try:
             session_history = self._get_session_history(authKeyId)
             if isinstance(session_history, DatabaseChatMessageHistory):
                 await session_history._load_messages()
+
+            skip_rag = self._should_skip_memory_search_by_content(user_input, session_history)
 
             input_data = {
                 "input": user_input,
@@ -195,6 +210,11 @@ class ChatChain:
                 "previous_analysis": self._get_last_analysis(authKeyId)
             }
 
+            if not skip_rag:
+                input_data["memories"] = await self._search_memories(input_data)
+            else:
+                input_data["memories"] = []
+
             ai_output = await self.chain_with_history.ainvoke(
                 input_data,
                 config={"configurable": {"session_id": authKeyId}}
@@ -203,8 +223,8 @@ class ChatChain:
             result = ai_output["output"]
 
             await self._save_conversation(authKeyId, user_input, result["response"])
-            raw_memories = await self._search_memories(input_data)
 
+            raw_memories = input_data.get("memories", [])
             used_memories = [
                 {
                     "collection": m["collection"],

@@ -21,7 +21,6 @@ from app.prompts.voice_prompt import VoicePrompts
 # LangSmith 안전 임포트
 try:
     from langsmith import traceable
-    # LangSmith 설정
     os.environ["LANGCHAIN_TRACING_V2"] = "true"
     os.environ["LANGCHAIN_API_KEY"] = settings.langsmith_api_key or ""
     os.environ["LANGCHAIN_ENDPOINT"] = settings.langsmith_endpoint
@@ -44,7 +43,7 @@ class VoiceMessageHistory(BaseChatMessageHistory):
             return
         try:
             conversations = await database_service.get_recent_conversations(
-                self.session_id, limit=10
+                self.session_id, limit=50
             )
             for conv in conversations:
                 if conv["sender"] == "USER":
@@ -171,7 +170,7 @@ class VoiceChain:
             self.voice_session_histories[session_id] = VoiceMessageHistory(session_id)
         return self.voice_session_histories[session_id]
 
-    def _get_recent_voice_messages(self, history: VoiceMessageHistory, limit: int = 5) -> str:
+    def _get_recent_voice_messages(self, history: VoiceMessageHistory, limit: int = 10) -> str:
         messages = history.messages[-limit:] if history else []
         text = []
         for m in messages:
@@ -197,9 +196,9 @@ class VoiceChain:
 
     @traceable(name="generate_voice_response")
     async def generate_voice_response(
-        self, 
-        user_speech_text: str, 
-        user_id: str, 
+        self,
+        user_speech_text: str,
+        user_id: str,
         authKeyId: str,
         voice_emotion: str = "neutral"
     ) -> Dict:
@@ -264,6 +263,12 @@ class VoiceChain:
     async def _search_voice_memories(self, data: Dict) -> List[Dict]:
         try:
             query = data["user_input"].strip()
+            history = self._get_voice_session_history(data["authKeyId"])
+
+            if VoicePrompts.should_skip_memory_search_by_content(query, history.messages):
+                logger.info("🎯 유사 대화 감지 - 메모리 검색 생략")
+                return []
+
             if len(query) <= 2:
                 logger.info(f"🔍 짧은 검색어 감지: '{query}' - 빠른 검색 모드")
                 if len(query) == 1:
@@ -318,9 +323,9 @@ class VoiceChain:
         return "🎤 관련 기억:\n" + "\n".join(memory_texts)
 
     async def _save_voice_conversation(
-        self, 
-        authKeyId: str, 
-        user_speech: str, 
+        self,
+        authKeyId: str,
+        user_speech: str,
         ai_response: str
     ):
         try:
