@@ -138,3 +138,11 @@ class VoicePrompts:
 
 음성 응답: [추억이 자연스럽게 녹아든 따뜻한 응답]
 """
+    @staticmethod
+    def should_skip_memory_search_by_content(text: str) -> bool:
+        """너무 짧거나 의미 없는 발화면 memory 검색 생략"""
+        skip_keywords = [
+            "응", "그래", "음", "아", "뭐라고", "하하", "응응",
+            "흠", "흠흠", "그렇구나", "그랬구나", "알았어", "맞아", "정말?"
+        ]
+        return len(text.strip()) < 4 or any(k in text.lower() for k in skip_keywords)
