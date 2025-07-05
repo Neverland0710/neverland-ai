@@ -1,4 +1,3 @@
-# app/chains/chat_chain.py
 from typing import Dict, List, Any
 from datetime import datetime
 import os
@@ -17,7 +16,6 @@ from app.services.advanced_rag_service import advanced_rag_service
 from app.services.database_service import database_service
 from app.prompts.chat_prompt import ChatPrompts
 
-# LangSmith 안전 임포트
 try:
     from langsmith import traceable
     os.environ["LANGCHAIN_TRACING_V2"] = "true"
@@ -63,6 +61,8 @@ class DatabaseChatMessageHistory(BaseChatMessageHistory):
         self._messages.clear()
 
 class SplitResponseParser:
+    MAX_RESPONSE_LENGTH = 300
+
     def __call__(self, text: Any) -> Dict[str, Any]:
         if isinstance(text, AIMessage):
             text = text.content
@@ -72,7 +72,6 @@ class SplitResponseParser:
         logger.debug(f"🔎 GPT 원본 응답: {text}")
         response, analysis, risk = "", "", "LOW"
 
-        # '|' 구분 포맷 우선 시도
         if "|" in text:
             try:
                 parts = text.strip().split("|")
@@ -82,7 +81,6 @@ class SplitResponseParser:
             except Exception as e:
                 logger.warning(f"⚠️ '|' 파싱 실패: {e}")
         else:
-            # 줄바꿈 기반 파싱
             lines = text.strip().splitlines()
             for line in lines:
                 if "응답 내용:" in line:
@@ -95,6 +93,9 @@ class SplitResponseParser:
         if not response:
             logger.warning("⚠️ 응답 파싱 실패 - 기본 메시지로 대체")
             response = "미안해, 지금은 잘 대답이 안 돼. 다시 한 번 이야기해줄래?"
+
+        if len(response) > self.MAX_RESPONSE_LENGTH:
+            response = response[:self.MAX_RESPONSE_LENGTH - 3] + "..."
 
         return {
             "output": {
@@ -176,15 +177,14 @@ class ChatChain:
         if not history or not history.messages:
             return ""
         for msg in reversed(history.messages):
-            if isinstance(msg, AIMessage) and isinstance(msg.content, str) and "|" in msg.content:
-                return msg.content.split("|")[-1].strip()
+            if isinstance(msg, AIMessage):
+                parsed = SplitResponseParser()(msg.content)
+                return parsed["output"].get("analysis", "")
         return ""
 
     def _should_skip_memory_search_by_content(self, user_input: str, history: DatabaseChatMessageHistory) -> bool:
-        """최근 응답 내용에 유사한 기억 내용이 포함되어 있는지 판단"""
         recent_ai_msgs = [m.content.lower() for m in reversed(history.messages[-50:]) if isinstance(m, AIMessage)]
         user_keywords = set(user_input.lower().split())
-
         for msg in recent_ai_msgs:
             msg_words = set(msg.split())
             overlap = user_keywords & msg_words
@@ -214,6 +214,8 @@ class ChatChain:
                 input_data["memories"] = await self._search_memories(input_data)
             else:
                 input_data["memories"] = []
+
+            logger.info(f"📝 입력: {user_input} | RAG 생략: {skip_rag} | 기억 수: {len(input_data['memories'])}")
 
             ai_output = await self.chain_with_history.ainvoke(
                 input_data,
@@ -255,48 +257,42 @@ class ChatChain:
             }
 
     async def _search_memories(self, data: Dict) -> List[Dict]:
-        """최적화된 메모리 검색 (짧은 검색어 + 병렬 처리)"""
         try:
             query = data["user_input"].strip()
-            
-            # 1. 짧은 검색어 최적화
+
             if len(query) <= 2:
                 logger.info(f"🔍 짧은 검색어 감지: '{query}' - 빠른 검색 모드")
-                # 짧은 검색어는 하나의 컬렉션만 검색하거나 스킵
                 if len(query) == 1:
                     logger.info("🚫 한 글자 검색어는 검색 생략")
                     return []
-                
-                # 두 글자는 daily_conversations만 빠르게 검색
                 try:
                     result = await asyncio.wait_for(
                         advanced_rag_service.search_memories(
                             query=query,
                             authKeyId=data["authKeyId"]
                         ),
-                        timeout=5.0  # 5초 제한
+                        timeout=5.0
                     )
                     return result[:3]
                 except asyncio.TimeoutError:
                     logger.warning(f"⏰ 짧은 검색어 '{query}' 타임아웃 - 검색 생략")
                     return []
-            
-            # 2. 일반 검색어 (3글자 이상) - 기존 방식 유지 (타임아웃만 추가)
+
             logger.info(f"🔍 일반 검색: '{query}'")
-            
+
             try:
                 result = await asyncio.wait_for(
                     advanced_rag_service.search_memories(
                         query=query,
                         authKeyId=data["authKeyId"]
                     ),
-                    timeout=15.0  # 15초 제한
+                    timeout=15.0
                 )
                 return result
             except asyncio.TimeoutError:
                 logger.warning(f"⏰ 검색어 '{query}' 타임아웃 - 빈 결과 반환")
                 return []
-            
+
         except Exception as e:
             logger.error(f"❌ 메모리 검색 실패: {e}")
             return []
@@ -308,11 +304,14 @@ class ChatChain:
         memories = data.get("memories", [])
         if not memories:
             return ""
-        memory_texts = [
-            f"({m.get('date_text', '날짜 미상')}) {m['content']}"
-            for m in memories[:2]
-        ]
-        return "📌 관련 기억:\n" + "\n\n".join(memory_texts)
+        memory_texts = []
+        for m in memories[:2]:
+            date_text = m.get("date_text", "어느 날")
+            content = m["content"]
+            if len(content) > 50:
+                content = content[:47] + "..."
+            memory_texts.append(f"{date_text}에 있었던 일: {content}")
+        return "📌 관련 기억:\n" + "\n".join(memory_texts)
 
     async def _save_conversation(self, authKeyId: str, user_message: str, ai_response: str):
         try:
