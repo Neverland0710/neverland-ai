@@ -36,5 +36,5 @@ async def generate_chat_response(request: ChatRequest):
         )
         
     except Exception as e:
-        logger.error(f"❌ 채팅 API 오류: {e}")
+        logger.error(f" 채팅 API 오류: {e}")
         raise HTTPException(status_code=500, detail=str(e))

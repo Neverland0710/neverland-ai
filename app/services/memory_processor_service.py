@@ -51,11 +51,11 @@ class MemoryProcessorService:
             # 단순 텍스트만 반환
             memory_content = response.content.strip()
             
-            logger.info(f"✅ {item_type} 기억 변환 완료")
+            logger.info(f" {item_type} 기억 변환 완료")
             return memory_content
             
         except Exception as e:
-            logger.error(f"❌ {item_type} 기억 변환 실패: {e}")
+            logger.error(f" {item_type} 기억 변환 실패: {e}")
             # 기본값 반환
             item_name = item_data.get('item_name') or item_data.get('title', '알 수 없는 아이템')
             return f"{item_name}에 담긴 소중한 기억"

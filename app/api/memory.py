@@ -26,7 +26,7 @@ rag_service = AdvancedRAGService()
 async def process_keepsake_memory(request: ProcessKeepsakeRequest):
     """유품을 기억 형태로 변환하여 Qdrant에 저장"""
     try:
-        logger.info(f"📿 유품 기억 처리 요청: {request.keepsake_id}")
+        logger.info(f" 유품 기억 처리 요청: {request.keepsake_id}")
         
         # 1. DB에서 유품 정보 조회
         keepsake_data = await Keepsake.get_by_id(request.keepsake_id)
@@ -66,7 +66,7 @@ async def process_keepsake_memory(request: ProcessKeepsakeRequest):
             **metadata
         )
         
-        logger.info(f"📿 유품 기억 처리 완료: {request.keepsake_id}")
+        logger.info(f" 유품 기억 처리 완료: {request.keepsake_id}")
         return MemoryProcessResponse(
             status="success",
             memory_content=memory_content,
@@ -77,14 +77,14 @@ async def process_keepsake_memory(request: ProcessKeepsakeRequest):
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"❌ 유품 기억 처리 실패: {e}")
+        logger.error(f" 유품 기억 처리 실패: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/photo/process", response_model=MemoryProcessResponse)
 async def process_photo_memory(request: ProcessPhotoRequest):
     """사진을 기억 형태로 변환하여 Qdrant에 저장"""
     try:
-        logger.info(f"📸 사진 기억 처리 요청: {request.photo_id}")
+        logger.info(f" 사진 기억 처리 요청: {request.photo_id}")
         
         # 1. DB에서 사진 정보 조회
         photo_data = await PhotoAlbum.get_by_id(request.photo_id)
@@ -124,7 +124,7 @@ async def process_photo_memory(request: ProcessPhotoRequest):
             **metadata
         )
                 
-        logger.info(f"📸 사진 기억 처리 완료: {request.photo_id}")
+        logger.info(f" 사진 기억 처리 완료: {request.photo_id}")
         return MemoryProcessResponse(
             status="success",
             memory_content=memory_content,
@@ -135,5 +135,5 @@ async def process_photo_memory(request: ProcessPhotoRequest):
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"❌ 사진 기억 처리 실패: {e}")
+        logger.error(f" 사진 기억 처리 실패: {e}")
         raise HTTPException(status_code=500, detail=str(e))

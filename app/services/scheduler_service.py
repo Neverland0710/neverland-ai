@@ -18,7 +18,7 @@ class SchedulerService:
     def __init__(self):
         self.scheduler = AsyncIOScheduler()
         self.llm = ChatOpenAI(model="gpt-4o", temperature=0.3)
-        logger.info("⏰ SchedulerService 초기화 완료")
+        logger.info(" SchedulerService 초기화 완료")
 
     def start(self):
         try:
@@ -28,20 +28,20 @@ class SchedulerService:
                 id='daily_summary'
             )
             self.scheduler.start()
-            logger.info("✅ 스케줄러 시작 - 일일 요약 작업 등록")
+            logger.info(" 스케줄러 시작 - 일일 요약 작업 등록")
         except Exception as e:
-            logger.error(f"❌ 스케줄러 시작 실패: {e}")
+            logger.error(f" 스케줄러 시작 실패: {e}")
 
     def stop(self):
         try:
             self.scheduler.shutdown()
-            logger.info("🛑 스케줄러 종료")
+            logger.info(" 스케줄러 종료")
         except Exception as e:
-            logger.error(f"❌ 스케줄러 종료 실패: {e}")
+            logger.error(f" 스케줄러 종료 실패: {e}")
 
     async def daily_summary_job(self):
         try:
-            logger.info("📊 일일 요약 작업 시작")
+            logger.info(" 일일 요약 작업 시작")
 
             # 1. 전체 사용자 고인 리스트 불러오기
             deceased_list = await database_service.get_all_deceased()
@@ -97,12 +97,12 @@ class SchedulerService:
                     memory_type="daily",
                     **metadata
                 )
-                logger.info(f"✅ 요약 저장 완료: {user_id} / {yesterday}")
+                logger.info(f" 요약 저장 완료: {user_id} / {yesterday}")
 
-            logger.info("🎉 모든 사용자 요약 완료")
+            logger.info(" 모든 사용자 요약 완료")
 
         except Exception as e:
-            logger.error(f"❌ 일일 요약 작업 실패: {e}")
+            logger.error(f" 일일 요약 작업 실패: {e}")
 
 
 # 전역 인스턴스

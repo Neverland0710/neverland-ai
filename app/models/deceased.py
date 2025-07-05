@@ -48,7 +48,7 @@ class Deceased(Base):
                 row = result.first()
                 
                 if not row:
-                    logger.warning(f"⚠️ 고인 정보를 찾을 수 없음: authKeyId='{authKeyId}'")
+                    logger.warning(f" 고인 정보를 찾을 수 없음: authKeyId='{authKeyId}'")
                     return None
                 
                 deceased, user_name, relation = row
@@ -83,5 +83,5 @@ class Deceased(Base):
                 }
                 
         except Exception as e:
-            logger.error(f"❌ 고인 정보 조회 실패: {e}")
+            logger.error(f" 고인 정보 조회 실패: {e}")
             return None

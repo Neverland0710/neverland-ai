@@ -116,15 +116,15 @@ class DatabaseService:
         self.database_url = f"mysql+aiomysql://{settings.mysql_user}:{settings.mysql_password}@{settings.mysql_host}:{settings.mysql_port}/{settings.mysql_database}"
         self.engine = create_async_engine(self.database_url, echo=settings.debug, pool_pre_ping=True, pool_recycle=3600)
         self.async_session = async_sessionmaker(self.engine, class_=AsyncSession, expire_on_commit=False)
-        logger.info("📄 DatabaseService 초기화 완료")
+        logger.info(" DatabaseService 초기화 완료")
 
     async def create_tables(self):
         try:
             async with self.engine.begin() as conn:
                 await conn.run_sync(Base.metadata.create_all)
-            logger.info("✅ 데이터베이스 테이블 생성 완료")
+            logger.info(" 데이터베이스 테이블 생성 완료")
         except Exception as e:
-            logger.error(f"❌ 테이블 생성 실패: {e}")
+            logger.error(f" 테이블 생성 실패: {e}")
 
     async def get_user_by_auth_key(self, authKeyId: str) -> Optional[Dict]:
         """기존 방식 유지 - 인증키로 사용자 정보 조회"""
@@ -154,7 +154,7 @@ class DatabaseService:
                 }
 
         except SQLAlchemyError as e:
-            logger.error(f"❌ 사용자 조회 실패: {e}")
+            logger.error(f" 사용자 조회 실패: {e}")
             return None
 
     async def get_deceased_by_auth_key(self, authKeyId: str) -> Dict:
@@ -172,7 +172,7 @@ class DatabaseService:
                 result = await session.execute(query)
                 row = result.first()
                 if not row:
-                    logger.warning(f"⚠️ 고인 정보를 찾을 수 없음: authKeyId='{authKeyId}'")
+                    logger.warning(f" 고인 정보를 찾을 수 없음: authKeyId='{authKeyId}'")
                     return {}
                 deceased, user_name, relation = row
                 age = date.today().year - deceased.BIRTH_DATE.year if deceased.BIRTH_DATE else None
@@ -197,14 +197,14 @@ class DatabaseService:
                 
                 # voice_id 로깅
                 if deceased.VOICE_ID:
-                    logger.info(f"✅ 고인 정보 조회 성공: {deceased_info['name']} (voice_id: {deceased.VOICE_ID})")
+                    logger.info(f" 고인 정보 조회 성공: {deceased_info['name']} (voice_id: {deceased.VOICE_ID})")
                 else:
-                    logger.warning(f"⚠️ 고인 {deceased_info['name']}의 voice_id가 설정되지 않음")
+                    logger.warning(f" 고인 {deceased_info['name']}의 voice_id가 설정되지 않음")
                 
                 return deceased_info
                 
         except SQLAlchemyError as e:
-            logger.error(f"❌ 고인 정보 조회 실패: {e}")
+            logger.error(f" 고인 정보 조회 실패: {e}")
             return {}
 
     async def update_deceased_voice_id(self, deceased_id: str, voice_id: str) -> bool:
@@ -221,14 +221,14 @@ class DatabaseService:
                     deceased.VOICE_ID = voice_id
                     await session.commit()
                     
-                    logger.info(f"✅ voice_id 업데이트 성공: {deceased.NAME} -> {voice_id}")
+                    logger.info(f" voice_id 업데이트 성공: {deceased.NAME} -> {voice_id}")
                     return True
                 else:
-                    logger.warning(f"⚠️ 고인을 찾을 수 없음: {deceased_id}")
+                    logger.warning(f" 고인을 찾을 수 없음: {deceased_id}")
                     return False
                     
         except SQLAlchemyError as e:
-            logger.error(f"❌ voice_id 업데이트 실패: {e}")
+            logger.error(f" voice_id 업데이트 실패: {e}")
             await session.rollback()
             return False
 
@@ -251,7 +251,7 @@ class DatabaseService:
                     for conv in conversations
                 ]
         except SQLAlchemyError as e:
-            logger.error(f"❌ 대화 조회 실패: {e}")
+            logger.error(f" 대화 조회 실패: {e}")
             return []
 
     async def save_conversation(self, authKeyId: str, sender: str, message: str, metadata: Dict = None):
@@ -259,7 +259,7 @@ class DatabaseService:
             from dateutil import parser
             from datetime import timezone, timedelta
 
-            # ✅ 한국 시간으로 설정
+            #  한국 시간으로 설정
             KST = timezone(timedelta(hours=9))
 
             sent_at = parser.isoparse(metadata["sent_at"]) if metadata and "sent_at" in metadata else datetime.now(KST)
@@ -274,9 +274,9 @@ class DatabaseService:
                 )
                 session.add(conversation)
                 await session.commit()
-                logger.info(f"📂 대화 저장 완료: sender={sender}, sent_at={sent_at.isoformat()}")
+                logger.info(f" 대화 저장 완료: sender={sender}, sent_at={sent_at.isoformat()}")
         except SQLAlchemyError as e:
-            logger.error(f"❌ 대화 저장 실패: {e}")
+            logger.error(f" 대화 저장 실패: {e}")
 
     async def save_letter(self, letter_id: str, authKeyId: str, title: str, content: str, status: str = "SENT"):
         try:
@@ -290,9 +290,9 @@ class DatabaseService:
                 )
                 session.add(letter)
                 await session.commit()
-                logger.info(f"💌 편지 저장 완료: {letter_id}")
+                logger.info(f" 편지 저장 완료: {letter_id}")
         except SQLAlchemyError as e:
-            logger.error(f"❌ 편지 저장 실패: {e}")
+            logger.error(f" 편지 저장 실패: {e}")
 
     async def get_letter_by_id(self, letter_id: str) -> Optional[Dict]:
         try:
@@ -311,7 +311,7 @@ class DatabaseService:
                     "delivery_status": letter.DELIVERY_STATUS
                 }
         except SQLAlchemyError as e:
-            logger.error(f"❌ 편지 조회 실패: {e}")
+            logger.error(f" 편지 조회 실패: {e}")
             return None
 
     async def get_keepsake_by_id(self, keepsake_id: str) -> Optional[Dict]:
@@ -333,7 +333,7 @@ class DatabaseService:
                     "created_at": keepsake.CREATED_AT.isoformat()
                 }
         except SQLAlchemyError as e:
-            logger.error(f"❌ 유품 조회 실패: {e}")
+            logger.error(f" 유품 조회 실패: {e}")
             return None
 
     async def get_photo_by_id(self, photo_id: str) -> Optional[Dict]:
@@ -356,7 +356,7 @@ class DatabaseService:
                     "uploaded_at": photo.UPLOADED_AT.isoformat()
                 }
         except SQLAlchemyError as e:
-            logger.error(f"❌ 사진 조회 실패: {e}")
+            logger.error(f" 사진 조회 실패: {e}")
             return None
 
     async def close(self):

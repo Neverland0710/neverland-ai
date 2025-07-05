@@ -40,6 +40,6 @@ async def init_db():
     try:
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
-        logger.info("✅ 데이터베이스 테이블 생성 완료")
+        logger.info(" 데이터베이스 테이블 생성 완료")
     except Exception as e:
-        logger.error(f"❌ 테이블 생성 실패: {e}")
+        logger.error(f" 테이블 생성 실패: {e}")

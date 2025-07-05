@@ -42,9 +42,9 @@ class TextConversation(Base):
                 session.add(conversation)
                 await session.commit()
                 
-                logger.info(f"💾 대화 저장 완료: sender={sender}")
+                logger.info(f" 대화 저장 완료: sender={sender}")
                 return True
                 
         except Exception as e:
-            logger.error(f"❌ 대화 저장 실패: {e}")
+            logger.error(f" 대화 저장 실패: {e}")
             return False

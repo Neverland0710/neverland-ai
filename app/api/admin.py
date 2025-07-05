@@ -14,23 +14,23 @@ MEMORY_COLLECTION_MAP = {
     "photo": settings.object_memory_collection
 }
 
-# ✅ DELETE → POST로 변경 (WebClient body 인식 오류 대응)
+# DELETE → POST로 변경 (WebClient body 인식 오류 대응)
 @router.delete("/admin/memory/delete", response_model=DeleteResponse)
 async def delete_memory(request: DeleteRequest):
     """편지/유품/사진 기억 삭제 (chat은 제외)"""
     try:
         logger.info(f"🗑️ 기억 삭제 요청: {request.item_type} {request.item_id}")
 
-        # ✅ chat은 삭제 금지
+        # chat은 삭제 금지
         if request.item_type == "chat":
             raise HTTPException(status_code=400, detail="chat 유형의 기억은 삭제할 수 없습니다.")
 
-        # ✅ 컬렉션 이름 매핑
+        # 컬렉션 이름 매핑
         collection_name = MEMORY_COLLECTION_MAP.get(request.item_type)
         if not collection_name:
             raise HTTPException(status_code=400, detail=f"지원하지 않는 item_type: {request.item_type}")
 
-        # ✅ 필터 조건 구성 (metadata 기준)
+        # 필터 조건 구성 (metadata 기준)
         delete_filter = {
             "must": [
                 {"key": "metadata.authKeyId", "match": {"value": request.authKeyId}},
@@ -39,13 +39,13 @@ async def delete_memory(request: DeleteRequest):
             ]
         }
 
-        # ✅ Qdrant 삭제 실행
+        # Qdrant 삭제 실행
         deleted_count = await rag_service.delete_memories_with_filter(
             collection_name=collection_name,
             filter_condition=delete_filter
         )
 
-        logger.info(f"🗑️ 기억 삭제 완료: {request.item_type} {request.item_id} ({deleted_count}개)")
+        logger.info(f" 기억 삭제 완료: {request.item_type} {request.item_id} ({deleted_count}개)")
 
         return DeleteResponse(
             status="deleted",
@@ -55,5 +55,5 @@ async def delete_memory(request: DeleteRequest):
         )
 
     except Exception as e:
-        logger.error(f"❌ 기억 삭제 실패: {e}")
+        logger.error(f" 기억 삭제 실패: {e}")
         raise HTTPException(status_code=500, detail=str(e))

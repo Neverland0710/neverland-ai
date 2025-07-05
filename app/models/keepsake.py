@@ -48,5 +48,5 @@ class Keepsake(Base):
                 }
                 break
         except Exception as e:
-            logger.error(f"❌ 유품 조회 실패: {e}")
+            logger.error(f" 유품 조회 실패: {e}")
             return None

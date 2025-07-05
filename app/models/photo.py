@@ -47,5 +47,5 @@ class PhotoAlbum(Base):
                 }
                 break
         except Exception as e:
-            logger.error(f"❌ 사진 조회 실패: {e}")
+            logger.error(f" 사진 조회 실패: {e}")
             return None

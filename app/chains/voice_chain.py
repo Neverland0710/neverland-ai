@@ -48,7 +48,7 @@ class VoiceMessageHistory(BaseChatMessageHistory):
                     self._messages.append(AIMessage(content=conv["message"]))
             self._loaded = True
         except Exception as e:
-            logger.error(f"❌ 대화 히스토리 로드 실패: {e}")
+            logger.error(f" 대화 히스토리 로드 실패: {e}")
             self._loaded = True
 
     @property
@@ -68,7 +68,7 @@ class VoiceResponseParser:
         elif not isinstance(text, str):
             text = str(text)
 
-        logger.debug(f"🎤 음성 GPT 원본 응답: {text}")
+        logger.debug(f" 음성 GPT 원본 응답: {text}")
         response, analysis, risk = "", "", "LOW"
 
         if "|" in text:
@@ -78,7 +78,7 @@ class VoiceResponseParser:
                 analysis = parts[1].strip().lstrip("음성 분위기 분석:").strip()
                 risk = parts[2].strip().replace("감정 위험도:", "").strip().upper()
             except Exception as e:
-                logger.warning(f"⚠️ 음성 파싱 실패: {e}")
+                logger.warning(f" 음성 파싱 실패: {e}")
         else:
             lines = text.strip().splitlines()
             for line in lines:
@@ -161,7 +161,7 @@ class VoiceChain:
     def _get_recent_voice_messages(self, history: VoiceMessageHistory, limit: int = 10) -> str:
         messages = history.messages[-limit:] if history else []
         return "\n".join([
-            f"👤 {m.content}" if isinstance(m, HumanMessage) else f"🤖 {m.content}"
+            f"👤 {m.content}" if isinstance(m, HumanMessage) else f" {m.content}"
             for m in messages
         ]) if messages else "(대화 기록 없음)"
 
@@ -225,7 +225,7 @@ class VoiceChain:
             }
 
         except Exception as e:
-            logger.error(f"❌ 음성 응답 생성 실패: {e}")
+            logger.error(f" 음성 응답 생성 실패: {e}")
             return {
                 "status": "error",
                 "voice_response": "어... 잠깐만, 무슨 말인지 잘 안 들렸어. 다시 한 번 말해줄래?",
@@ -237,7 +237,7 @@ class VoiceChain:
         history = self._get_voice_session_history(data["authKeyId"])
 
         if self._should_skip_memory_search_by_content(query, history.messages):
-            logger.info("🎯 유사 대화 감지 - 메모리 검색 생략")
+            logger.info(" 유사 대화 감지 - 메모리 검색 생략")
             return []
 
         try:
@@ -251,10 +251,10 @@ class VoiceChain:
             )
             return result[:3] if timeout == 5.0 else result[:5]
         except asyncio.TimeoutError:
-            logger.warning(f"⏰ 검색어 '{query}' 타임아웃 - 빈 결과 반환")
+            logger.warning(f" 검색어 '{query}' 타임아웃 - 빈 결과 반환")
             return []
         except Exception as e:
-            logger.error(f"❌ 메모리 검색 실패: {e}")
+            logger.error(f" 메모리 검색 실패: {e}")
             return []
 
     def _should_skip_memory_search_by_content(self, query: str, messages: List[BaseMessage]) -> bool:
@@ -280,13 +280,13 @@ class VoiceChain:
         for m in memories[:2]:
             content = m['content'][:47] + "..." if len(m['content']) > 50 else m['content']
             memory_texts.append(f"{m.get('date_text', '언젠가')}에 {content}")
-        return "🎤 관련 기억:\n" + "\n".join(memory_texts)
+        return " 관련 기억:\n" + "\n".join(memory_texts)
 
     async def _save_voice_conversation(self, authKeyId: str, user_speech: str, ai_response: str):
         try:
             await database_service.save_conversation(authKeyId=authKeyId, sender="USER", message=user_speech)
             await database_service.save_conversation(authKeyId=authKeyId, sender="CHATBOT", message=ai_response)
         except Exception as e:
-            logger.error(f"❌ 대화 저장 실패: {e}")
+            logger.error(f" 대화 저장 실패: {e}")
 
 voice_chain = VoiceChain()

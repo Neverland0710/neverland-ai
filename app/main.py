@@ -33,30 +33,30 @@ app.add_middleware(
 @app.on_event("startup")
 async def startup_event():
     """앱 시작시 초기화"""
-    logger.info("🚀 AI Memorial Chat Service 시작")
-    logger.info(f"🔧 Debug 모드: {settings.debug}")
-    logger.info(f"📊 Collections: {settings.daily_conversation_collection}, {settings.letter_memory_collection}, {settings.object_memory_collection}")
+    logger.info(" AI Memorial Chat Service 시작")
+    logger.info(f" Debug 모드: {settings.debug}")
+    logger.info(f" Collections: {settings.daily_conversation_collection}, {settings.letter_memory_collection}, {settings.object_memory_collection}")
     
     # 정적 파일 디렉토리 생성
     os.makedirs("static", exist_ok=True)
     os.makedirs("static/audio", exist_ok=True)
-    logger.info("🎤 음성 서비스 디렉토리 생성 완료")
+    logger.info(" 음성 서비스 디렉토리 생성 완료")
     
     # 데이터베이스 테이블 생성 (필요시)
     try:
         await database_service.create_tables()
         logger.info("🗄️ 데이터베이스 초기화 완료")
     except Exception as e:
-        logger.warning(f"⚠️ 데이터베이스 초기화 실패: {e}")
+        logger.warning(f" 데이터베이스 초기화 실패: {e}")
     
     # 스케줄러 시작 (일일 요약만)
     scheduler_service.start()
-    logger.info("⏰ 스케줄러 시작 완료")
+    logger.info(" 스케줄러 시작 완료")
 
 @app.on_event("shutdown")
 async def shutdown_event():
     """앱 종료시 정리"""
-    logger.info("🛑 AI Memorial Chat Service 종료")
+    logger.info(" AI Memorial Chat Service 종료")
     scheduler_service.stop()
     await database_service.close()
 

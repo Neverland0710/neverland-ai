@@ -52,22 +52,22 @@ class VoiceService:
 
         logger.info(f"🎤 [통합 처리] 텍스트+음성 생성 시작")
 
-        # ✅ 1. 고인 정보 조회
+        #  1. 고인 정보 조회
         deceased_info = await self.db_service.get_deceased_by_auth_key(authKeyId)
         if not deceased_info:
             raise Exception("고인 정보를 찾을 수 없습니다")
 
         voice_id = deceased_info.get("voice_id") or getattr(settings, 'default_voice_id', 'DMkRitQrfpiddSQT5adl')
 
-        # ✅ 2. 감정 감지 (voice_emotion이 None이면 자동 감지)
+        #  2. 감정 감지 (voice_emotion이 None이면 자동 감지)
         if voice_emotion is None:
             detected_emotion = self._detect_user_emotion(user_text)
-            logger.info(f"🎭 감정 자동 감지: '{user_text}' -> {detected_emotion}")
+            logger.info(f" 감정 자동 감지: '{user_text}' -> {detected_emotion}")
         else:
             detected_emotion = voice_emotion
-            logger.info(f"🎭 감정 수동 설정: {detected_emotion}")
+            logger.info(f" 감정 수동 설정: {detected_emotion}")
 
-        # ✅ 3. GPT 응답 생성 (감정 반영)
+        #  3. GPT 응답 생성 (감정 반영)
         voice_result = await self.voice_chain.generate_voice_response(
             user_speech_text=user_text,
             user_id=user_info.get("user_id"),
@@ -78,7 +78,7 @@ class VoiceService:
         if voice_result["status"] != "success":
             raise Exception("GPT 응답 생성 실패")
 
-        # ✅ 4. 텍스트 → TTS로 변환 (안정적인 설정으로)
+        #  4. 텍스트 → TTS로 변환 (안정적인 설정으로)
         gpt_text = voice_result["voice_response"]
         
         audio_data = b""
@@ -86,7 +86,7 @@ class VoiceService:
             if audio_chunk:
                 audio_data += audio_chunk
 
-        logger.info(f"✅ [통합 완료] 텍스트 + TTS 변환 완료 ({len(audio_data)} bytes, emotion: {detected_emotion})")
+        logger.info(f" [통합 완료] 텍스트 + TTS 변환 완료 ({len(audio_data)} bytes, emotion: {detected_emotion})")
 
         return {
             "response_text": gpt_text,
@@ -128,10 +128,10 @@ class VoiceService:
                         async for chunk in response.content.iter_chunked(8192):
                             if chunk:
                                 yield chunk
-                        logger.info("✅ HTTP TTS 완료")
+                        logger.info(" HTTP TTS 완료")
                     else:
                         error_text = await response.text()
-                        logger.error(f"❌ HTTP TTS 실패: {response.status} - {error_text}")
+                        logger.error(f" HTTP TTS 실패: {response.status} - {error_text}")
 
         except Exception as e:
-            logger.error(f"❌ HTTP TTS 실패: {str(e)}")
+            logger.error(f" HTTP TTS 실패: {str(e)}")

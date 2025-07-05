@@ -16,7 +16,7 @@ router = APIRouter(tags=["search"])
 async def search_memories(request: SearchRequest):
     """지능형 기억 검색"""
     try:
-        logger.info(f"🔍 기억 검색 요청: query='{request.query}'")
+        logger.info(f" 기억 검색 요청: query='{request.query}'")
 
         # memory_type 제거 → 모든 컬렉션에서 검색
         memories = await advanced_rag_service.search_memories(
@@ -31,5 +31,5 @@ async def search_memories(request: SearchRequest):
         )
 
     except Exception as e:
-        logger.error(f"❌ 기억 검색 실패: {e}")
+        logger.error(f" 기억 검색 실패: {e}")
         raise HTTPException(status_code=500, detail=str(e))

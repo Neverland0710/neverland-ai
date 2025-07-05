@@ -14,7 +14,7 @@ from app.utils.logger import logger
 
 logger = logging.getLogger("memorial_chat")
 
-# ✅ LangSmith 추적 연동
+#  LangSmith 추적 연동
 os.environ["LANGCHAIN_TRACING_V2"] = "true"
 os.environ["LANGCHAIN_API_KEY"] = settings.langsmith_api_key
 os.environ["LANGCHAIN_PROJECT"] = settings.langsmith_project
@@ -66,14 +66,14 @@ class AdvancedRAGService:
             embeddings=self.embeddings
         )
 
-        logger.info("🎯 AdvancedRAGService 초기화 완료")
+        logger.info(" AdvancedRAGService 초기화 완료")
 
     async def search_memories(self, query: str, authKeyId: str) -> List[Dict]:
         try:
             logger.info(f"🔍 RAG 검색 시작: query='{query}', authKeyId='{authKeyId}'")
             results = []
 
-            # ✅ 병렬 검색 수행
+            #  병렬 검색 수행
             letter_task = self.letter_memory_store.asimilarity_search_with_score(query, k=3)
             object_task = self.object_memory_store.asimilarity_search_with_score(query, k=3)
             daily_task = self.daily_conversation_store.asimilarity_search_with_score(query, k=3)
@@ -82,7 +82,7 @@ class AdvancedRAGService:
                 letter_task, object_task, daily_task
             )
             
-            logger.info(f"📊 검색 결과: letter={len(letter_docs)}, object={len(object_docs)}, daily={len(daily_docs)}")
+            logger.info(f" 검색 결과: letter={len(letter_docs)}, object={len(object_docs)}, daily={len(daily_docs)}")
 
             for docs, collection in [
                 (letter_docs, "letter"),
@@ -99,12 +99,12 @@ class AdvancedRAGService:
                         "date_text": format_date_relative(meta.get("date", ""))
                     })
 
-            logger.info(f"📋 전체 검색 결과: {len(results)}개")
+            logger.info(f" 전체 검색 결과: {len(results)}개")
             for r in results:
                 logger.info(f"  - {r['collection']} | score: {r['score']:.4f} | authKeyId: {r['metadata'].get('authKeyId', 'NONE')}")
 
             filtered = [r for r in results if r["metadata"].get("authKeyId") == authKeyId]
-            logger.info(f"🔐 authKeyId 필터 후: {len(filtered)}개")
+            logger.info(f" authKeyId 필터 후: {len(filtered)}개")
 
             RELEVANCE_THRESHOLD = 0.3  
             relevant = [
@@ -112,7 +112,7 @@ class AdvancedRAGService:
                 if r["score"] is not None and r["score"] >= RELEVANCE_THRESHOLD
             ]
 
-            logger.info(f"⭐ 임계값 {RELEVANCE_THRESHOLD} 이상: {len(relevant)}개")
+            logger.info(f" 임계값 {RELEVANCE_THRESHOLD} 이상: {len(relevant)}개")
             for r in relevant:
                 logger.info(f"[{r['collection']} | score: {r['score']:.4f}] {r['date_text']} - {r['content'][:30]}...")
 
@@ -120,7 +120,7 @@ class AdvancedRAGService:
             return sorted_relevant[:3]
 
         except Exception as e:
-            logger.error(f"❌ 기억 검색 실패: {e}")
+            logger.error(f" 기억 검색 실패: {e}")
             return []
 
     async def store_memory(self, content: str, authKeyId: str, memory_type: str, **kwargs) -> Dict:
@@ -138,11 +138,11 @@ class AdvancedRAGService:
             doc = Document(page_content=content, metadata=metadata)
             await store.aadd_documents([doc])
 
-            logger.info(f"✅ 기억 저장 완료: type={memory_type}")
+            logger.info(f" 기억 저장 완료: type={memory_type}")
             return {"status": "stored", "collection": store.collection_name}
 
         except Exception as e:
-            logger.error(f"❌ 기억 저장 실패: {e}")
+            logger.error(f" 기억 저장 실패: {e}")
             return {"status": "failed", "error": str(e)}
 
     async def store_memory_with_metadata(
@@ -164,21 +164,21 @@ class AdvancedRAGService:
             doc = Document(page_content=page_content, metadata=metadata)
             await store.aadd_documents([doc])
 
-            logger.info(f"✅ store_memory_with_metadata 완료: type={memory_type}")
+            logger.info(f" store_memory_with_metadata 완료: type={memory_type}")
             return {"status": "stored", "collection": store.collection_name}
 
         except Exception as e:
-            logger.error(f"❌ store_memory_with_metadata 실패: {e}")
+            logger.error(f" store_memory_with_metadata 실패: {e}")
             return {"status": "failed", "error": str(e)}
 
     async def delete_memories_with_filter(self, collection_name: str, filter_condition: Dict) -> int:
         try:
             store = self._get_store_by_collection(collection_name)
             await store.adelete(filter=filter_condition)
-            logger.info(f"🗑️ Qdrant에서 삭제 완료: {collection_name} (조건: {filter_condition})")
+            logger.info(f" Qdrant에서 삭제 완료: {collection_name} (조건: {filter_condition})")
             return 1
         except Exception as e:
-            logger.error(f"❌ delete_memories_with_filter 실패: {e}")
+            logger.error(f" delete_memories_with_filter 실패: {e}")
             return 0
 
     def _get_store_by_type(self, memory_type: str):

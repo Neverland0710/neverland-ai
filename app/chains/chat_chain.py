@@ -23,7 +23,7 @@ try:
     os.environ["LANGCHAIN_ENDPOINT"] = settings.langsmith_endpoint
     os.environ["LANGCHAIN_PROJECT"] = settings.langsmith_project
 except ImportError:
-    logger.warning("⚠️ LangSmith 패키지가 설치되지 않음 - 추적 기능 비활성화")
+    logger.warning(" LangSmith 패키지가 설치되지 않음 - 추적 기능 비활성화")
     def traceable(name=None):
         def decorator(func):
             return func
@@ -47,7 +47,7 @@ class DatabaseChatMessageHistory(BaseChatMessageHistory):
                     self._messages.append(AIMessage(content=conv["message"]))
             self._loaded = True
         except Exception as e:
-            logger.error(f"❌ 히스토리 로드 실패: {e}")
+            logger.error(f" 히스토리 로드 실패: {e}")
             self._loaded = True
 
     @property
@@ -69,7 +69,7 @@ class SplitResponseParser:
         elif not isinstance(text, str):
             text = str(text)
 
-        logger.debug(f"🔎 GPT 원본 응답: {text}")
+        logger.debug(f" GPT 원본 응답: {text}")
         response, analysis, risk = "", "", "LOW"
 
         if "|" in text:
@@ -79,7 +79,7 @@ class SplitResponseParser:
                 analysis = parts[1].strip().lstrip("분위기 분석 요약:").strip()
                 risk = parts[2].strip().replace("위험도:", "").strip().upper()
             except Exception as e:
-                logger.warning(f"⚠️ '|' 파싱 실패: {e}")
+                logger.warning(f" '|' 파싱 실패: {e}")
         else:
             lines = text.strip().splitlines()
             for line in lines:
@@ -91,7 +91,7 @@ class SplitResponseParser:
                     risk = line.split("위험도:", 1)[1].strip().upper()
 
         if not response:
-            logger.warning("⚠️ 응답 파싱 실패 - 기본 메시지로 대체")
+            logger.warning(" 응답 파싱 실패 - 기본 메시지로 대체")
             response = "미안해, 지금은 잘 대답이 안 돼. 다시 한 번 이야기해줄래?"
 
         if len(response) > self.MAX_RESPONSE_LENGTH:
@@ -162,9 +162,9 @@ class ChatChain:
         text = []
         for m in messages:
             if isinstance(m, HumanMessage):
-                text.append(f"👤 {m.content}")
+                text.append(f" {m.content}")
             elif isinstance(m, AIMessage):
-                text.append(f"🤖 {m.content}")
+                text.append(f" {m.content}")
         return "\n".join(text) if text else "(최근 대화 없음)"
 
     def _extract_date_text(self, memories: List[Dict]) -> str:
@@ -189,7 +189,7 @@ class ChatChain:
             msg_words = set(msg.split())
             overlap = user_keywords & msg_words
             if len(overlap) / max(len(user_keywords), 1) >= 0.6:
-                logger.info("🧠 최근 응답과 유사한 내용 발견 → 기억 검색 생략")
+                logger.info(" 최근 응답과 유사한 내용 발견 → 기억 검색 생략")
                 return True
         return False
 
@@ -215,7 +215,7 @@ class ChatChain:
             else:
                 input_data["memories"] = []
 
-            logger.info(f"📝 입력: {user_input} | RAG 생략: {skip_rag} | 기억 수: {len(input_data['memories'])}")
+            logger.info(f" 입력: {user_input} | RAG 생략: {skip_rag} | 기억 수: {len(input_data['memories'])}")
 
             ai_output = await self.chain_with_history.ainvoke(
                 input_data,
@@ -249,7 +249,7 @@ class ChatChain:
             }
 
         except Exception as e:
-            logger.error(f"❌ 대화 생성 실패: {e}")
+            logger.error(f" 대화 생성 실패: {e}")
             return {
                 "status": "error",
                 "response": "죄송해요, 지금은 생각이 잘 정리되지 않네요. 다시 한 번 말해줄래요?",
@@ -263,7 +263,7 @@ class ChatChain:
             if len(query) <= 2:
                 logger.info(f"🔍 짧은 검색어 감지: '{query}' - 빠른 검색 모드")
                 if len(query) == 1:
-                    logger.info("🚫 한 글자 검색어는 검색 생략")
+                    logger.info(" 한 글자 검색어는 검색 생략")
                     return []
                 try:
                     result = await asyncio.wait_for(
@@ -275,10 +275,10 @@ class ChatChain:
                     )
                     return result[:3]
                 except asyncio.TimeoutError:
-                    logger.warning(f"⏰ 짧은 검색어 '{query}' 타임아웃 - 검색 생략")
+                    logger.warning(f" 짧은 검색어 '{query}' 타임아웃 - 검색 생략")
                     return []
 
-            logger.info(f"🔍 일반 검색: '{query}'")
+            logger.info(f" 일반 검색: '{query}'")
 
             try:
                 result = await asyncio.wait_for(
@@ -290,11 +290,11 @@ class ChatChain:
                 )
                 return result
             except asyncio.TimeoutError:
-                logger.warning(f"⏰ 검색어 '{query}' 타임아웃 - 빈 결과 반환")
+                logger.warning(f" 검색어 '{query}' 타임아웃 - 빈 결과 반환")
                 return []
 
         except Exception as e:
-            logger.error(f"❌ 메모리 검색 실패: {e}")
+            logger.error(f" 메모리 검색 실패: {e}")
             return []
 
     async def _get_deceased_info(self, data: Dict) -> Dict:
@@ -311,7 +311,7 @@ class ChatChain:
             if len(content) > 50:
                 content = content[:47] + "..."
             memory_texts.append(f"{date_text}에 있었던 일: {content}")
-        return "📌 관련 기억:\n" + "\n".join(memory_texts)
+        return " 관련 기억:\n" + "\n".join(memory_texts)
 
     async def _save_conversation(self, authKeyId: str, user_message: str, ai_response: str):
         try:
@@ -326,6 +326,6 @@ class ChatChain:
                 message=ai_response
             )
         except Exception as e:
-            logger.error(f"❌ 대화 저장 실패: {e}")
+            logger.error(f" 대화 저장 실패: {e}")
 
 chat_chain = ChatChain()
