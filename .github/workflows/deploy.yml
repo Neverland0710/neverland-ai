@@ -24,7 +24,7 @@ jobs:
           echo "MYSQL_PORT=${{ secrets.MYSQL_PORT }}" >> .env
           echo "MYSQL_USER=${{ secrets.MYSQL_USER }}" >> .env
           echo "MYSQL_PASSWORD=${{ secrets.MYSQL_PASSWORD }}" >> .env
-          echo "MYSQL_DB=${{ secrets.MYSQL_DB }}" >> .env
+          echo "MYSQL_DATABASE=${{ secrets.MYSQL_DATABASE }}" >> .env
           echo "ELEVENLABS_API_KEY=${{ secrets.ELEVENLABS_API_KEY }}" >> .env
           echo "LANGSMITH_API_KEY=${{ secrets.LANGSMITH_API_KEY }}" >> .env
           echo "LANGSMITH_ENDPOINT=${{ secrets.LANGSMITH_ENDPOINT }}" >> .env
@@ -56,7 +56,7 @@ jobs:
             MYSQL_PORT=${{ secrets.MYSQL_PORT }}
             MYSQL_USER=${{ secrets.MYSQL_USER }}
             MYSQL_PASSWORD=${{ secrets.MYSQL_PASSWORD }}
-            MYSQL_DB=${{ secrets.MYSQL_DB }}
+            MYSQL_DATABASE=${{ secrets.MYSQL_DATABASE }}
             ELEVENLABS_API_KEY=${{ secrets.ELEVENLABS_API_KEY }}
             LANGSMITH_API_KEY=${{ secrets.LANGSMITH_API_KEY }}
             LANGSMITH_ENDPOINT=${{ secrets.LANGSMITH_ENDPOINT }}
