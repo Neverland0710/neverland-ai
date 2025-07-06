@@ -19,7 +19,7 @@ class LetterChain:
     def __init__(self):
         self.llm = ChatOpenAI(
             model="gpt-4o",
-            temperature=0.5,
+            temperature=0.2,
             openai_api_key=settings.openai_api_key
         )
         self.output_parser = StrOutputParser()
@@ -33,7 +33,7 @@ class LetterChain:
 
             #  고인 정보 조회 (DB)
             deceased_info = await database_service.get_deceased_by_auth_key(authKeyId)
-            logger.debug(f"[🧑‍💼 고인 정보 조회 완료] {deceased_info}")
+            logger.debug(f"[ 고인 정보 조회 완료] {deceased_info}")
 
             #  프롬프트 준비
             summary_prompt = PromptTemplate.from_template(LetterPrompts.LETTER_SUMMARY)

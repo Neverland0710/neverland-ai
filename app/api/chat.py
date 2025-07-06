@@ -16,7 +16,7 @@ router = APIRouter(tags=["chat"])
 async def generate_chat_response(request: ChatRequest):
     """실시간 대화 응답 생성"""
     try:
-        logger.info(f"🔥 채팅 요청: user_id={request.user_id}, authKeyId={request.authKeyId}")
+        logger.info(f" 채팅 요청: user_id={request.user_id}, authKeyId={request.authKeyId}")
         
         # 응답 생성 (고인 정보는 체인 내부에서 조회)
         result = await chat_chain.generate_response(

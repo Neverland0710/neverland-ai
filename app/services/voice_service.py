@@ -50,7 +50,7 @@ class VoiceService:
     ) -> Dict[str, Any]:
         """텍스트 응답 생성 + 음성 생성까지 한번에"""
 
-        logger.info(f"🎤 [통합 처리] 텍스트+음성 생성 시작")
+        logger.info(f" [통합 처리] 텍스트+음성 생성 시작")
 
         #  1. 고인 정보 조회
         deceased_info = await self.db_service.get_deceased_by_auth_key(authKeyId)
@@ -117,7 +117,7 @@ class VoiceService:
                 "voice_settings": {
                     "stability": 0.8,
                     "similarity_boost": 0.9,
-                    "style": 0.5,  # 고정값
+                    "style": 0.5,
                     "use_speaker_boost": True
                 }
             }

@@ -185,7 +185,7 @@ class DatabaseService:
                     "speaking_style": deceased.SPEAKING_STYLE,
                     "personality": deceased.PERSONALITY,
                     "hobbies": deceased.HOBBIES,
-                    "voice_id": deceased.VOICE_ID,  # 🎵 voice_id 추가
+                    "voice_id": deceased.VOICE_ID,  
                     "birth_date": deceased.BIRTH_DATE.isoformat() if deceased.BIRTH_DATE else None,
                     "death_date": deceased.DEATH_DATE.isoformat() if deceased.DEATH_DATE else None,
                     "age": age,
