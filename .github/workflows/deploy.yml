@@ -12,24 +12,6 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v3
 
-      - name: Create .env file from secrets
-        run: |
-          echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" >> .env
-          echo "QDRANT_URL=${{ secrets.QDRANT_URL }}" >> .env
-          echo "QDRANT_API_KEY=${{ secrets.QDRANT_API_KEY }}" >> .env
-          echo "DAILY_COLLECTION=${{ secrets.DAILY_COLLECTION }}" >> .env
-          echo "LETTER_COLLECTION=${{ secrets.LETTER_COLLECTION }}" >> .env
-          echo "OBJECT_COLLECTION=${{ secrets.OBJECT_COLLECTION }}" >> .env
-          echo "MYSQL_HOST=${{ secrets.MYSQL_HOST }}" >> .env
-          echo "MYSQL_PORT=${{ secrets.MYSQL_PORT }}" >> .env
-          echo "MYSQL_USER=${{ secrets.MYSQL_USER }}" >> .env
-          echo "MYSQL_PASSWORD=${{ secrets.MYSQL_PASSWORD }}" >> .env
-          echo "MYSQL_DB=${{ secrets.MYSQL_DB }}" >> .env
-          echo "ELEVENLABS_API_KEY=${{ secrets.ELEVENLABS_API_KEY }}" >> .env
-          echo "LANGSMITH_API_KEY=${{ secrets.LANGSMITH_API_KEY }}" >> .env
-          echo "LANGSMITH_ENDPOINT=${{ secrets.LANGSMITH_ENDPOINT }}" >> .env
-          echo "LANGSMITH_PROJECT=${{ secrets.LANGSMITH_PROJECT }}" >> .env
-
       - name: Build Docker Image
         run: docker build -t neverland-ai .
 
@@ -41,32 +23,30 @@ jobs:
           key: ${{ secrets.EC2_KEY }}
           port: 22
           script: |
-            echo "프로젝트 디렉토리 이동 or 클론"
-            cd ~/neverland-ai || git clone https://github.com/yourname/neverland-ai.git && cd neverland-ai
+            echo "📁 프로젝트 디렉토리 이동 or 클론"
+            cd ~/neverland-ai || git clone https://github.com/Neverland0710/neverland-ai.git && cd neverland-ai
 
-            echo ".env 파일 생성"
-            cat <<EOF > .env
-            OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
-            QDRANT_URL=${{ secrets.QDRANT_URL }}
-            QDRANT_API_KEY=${{ secrets.QDRANT_API_KEY }}
-            DAILY_COLLECTION=${{ secrets.DAILY_COLLECTION }}
-            LETTER_COLLECTION=${{ secrets.LETTER_COLLECTION }}
-            OBJECT_COLLECTION=${{ secrets.OBJECT_COLLECTION }}
-            MYSQL_HOST=${{ secrets.MYSQL_HOST }}
-            MYSQL_PORT=${{ secrets.MYSQL_PORT }}
-            MYSQL_USER=${{ secrets.MYSQL_USER }}
-            MYSQL_PASSWORD=${{ secrets.MYSQL_PASSWORD }}
-            MYSQL_DB=${{ secrets.MYSQL_DB }}
-            ELEVENLABS_API_KEY=${{ secrets.ELEVENLABS_API_KEY }}
-            LANGSMITH_API_KEY=${{ secrets.LANGSMITH_API_KEY }}
-            LANGSMITH_ENDPOINT=${{ secrets.LANGSMITH_ENDPOINT }}
-            LANGSMITH_PROJECT=${{ secrets.LANGSMITH_PROJECT }}
-            EOF
+            echo "🔐 .env 파일 생성"
+            echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" > .env
+            echo "QDRANT_URL=${{ secrets.QDRANT_URL }}" >> .env
+            echo "QDRANT_API_KEY=${{ secrets.QDRANT_API_KEY }}" >> .env
+            echo "DAILY_COLLECTION=${{ secrets.DAILY_COLLECTION }}" >> .env
+            echo "LETTER_COLLECTION=${{ secrets.LETTER_COLLECTION }}" >> .env
+            echo "OBJECT_COLLECTION=${{ secrets.OBJECT_COLLECTION }}" >> .env
+            echo "MYSQL_HOST=${{ secrets.MYSQL_HOST }}" >> .env
+            echo "MYSQL_PORT=${{ secrets.MYSQL_PORT }}" >> .env
+            echo "MYSQL_USER=${{ secrets.MYSQL_USER }}" >> .env
+            echo "MYSQL_PASSWORD=${{ secrets.MYSQL_PASSWORD }}" >> .env
+            echo "MYSQL_DATABASE=${{ secrets.MYSQL_DATABASE }}" >> .env
+            echo "ELEVENLABS_API_KEY=${{ secrets.ELEVENLABS_API_KEY }}" >> .env
+            echo "LANGSMITH_API_KEY=${{ secrets.LANGSMITH_API_KEY }}" >> .env
+            echo "LANGSMITH_ENDPOINT=${{ secrets.LANGSMITH_ENDPOINT }}" >> .env
+            echo "LANGSMITH_PROJECT=${{ secrets.LANGSMITH_PROJECT }}" >> .env
 
-            echo "기존 컨테이너 종료 및 삭제"
+            echo "🧹 기존 컨테이너 종료 및 삭제"
             docker rm -f neverland-ai || true
 
-            echo "최신 이미지 빌드 및 실행"
+            echo "🛠️ 최신 이미지 빌드 및 실행"
             docker build -t neverland-ai .
             docker run -d \
               -p 8000:8000 \
@@ -75,4 +55,4 @@ jobs:
               --name neverland-ai \
               neverland-ai
 
-            echo "배포 완료"
+            echo "🚀 배포 완료"
