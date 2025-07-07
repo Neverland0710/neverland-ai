@@ -6,7 +6,7 @@ import uuid
 from app.models.keepsake import Keepsake
 from app.models.photo import PhotoAlbum
 from app.models.deceased import Deceased
-from app.services.memory_processor_service import memory_processor
+from app.services.memory_processor_service import MemoryProcessorService
 from app.schemas.memory_schemas import ProcessKeepsakeRequest, ProcessPhotoRequest, MemoryProcessResponse
 from app.utils.logger import logger
 

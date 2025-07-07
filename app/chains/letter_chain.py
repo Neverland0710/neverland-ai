@@ -1,7 +1,6 @@
-# app/chains/letter_chain.py
-
 from datetime import datetime
 import time
+import re
 
 from langchain.prompts import PromptTemplate
 from langchain_core.output_parsers import StrOutputParser
@@ -14,6 +13,7 @@ from app.utils.logger import logger
 from app.prompts.letter_prompt import LetterPrompts
 from app.config import settings
 
+
 class LetterChain:
     def __init__(self):
         self.llm = ChatOpenAI(
@@ -22,6 +22,16 @@ class LetterChain:
             openai_api_key=settings.openai_api_key
         )
         self.output_parser = StrOutputParser()
+
+    def parse_summary_and_tags(self, raw_text: str) -> (str, list):
+        """GPT 응답에서 요약과 태그 추출"""
+        summary_match = re.search(r"요약:\s*(.*?)\n", raw_text, re.DOTALL)
+        tags_match = re.search(r"태그:\s*(.*)", raw_text)
+
+        summary = summary_match.group(1).strip() if summary_match else raw_text.strip()
+        tags_str = tags_match.group(1).strip() if tags_match else ""
+        tags = [t.strip() for t in tags_str.split(",") if t.strip()]
+        return summary, tags
 
     async def process_letter(self, letter_id: str, user_id: str, authKeyId: str, letter_text: str) -> LetterProcessInternalResult:
         try:
@@ -52,7 +62,8 @@ class LetterChain:
                 "deceased_name": deceased_info["name"],
                 "relation_to_user": deceased_info["relation_to_user"]
             }
-            summary = await summary_chain.ainvoke(summary_input)
+            summary_raw = await summary_chain.ainvoke(summary_input)
+            summary, tags = self.parse_summary_and_tags(summary_raw)
 
             store_result = await advanced_rag_service.store_memory(
                 content=summary,
@@ -61,7 +72,7 @@ class LetterChain:
                 item_id=f"letter_{datetime.utcnow().timestamp()}",
                 item_type="letter",
                 source="letter",
-                tags=["letter", "요약"],
+                tags=tags,
                 date=datetime.today().strftime("%Y-%m-%d")
             )
 
@@ -71,7 +82,7 @@ class LetterChain:
                 response=response,
                 summary_stored=summary,
                 emotion_tone=None,
-                tags=["letter"],
+                tags=tags,
                 processing_time=elapsed
             )
 
@@ -80,5 +91,6 @@ class LetterChain:
             return LetterProcessInternalResult(
                 response="죄송해요, 답장을 준비하다 문제가 생겼어요."
             )
+
 
 letter_chain = LetterChain()

@@ -42,15 +42,20 @@ class MemoryProcessorService:
             logger.debug(f"[ MemoryProcessor ] 프롬프트 생성 완료 - type={itemType}")
 
             response = await self.llm.ainvoke([{"role": "user", "content": prompt}])
-            memoryText = response.content.strip()
+            full_text = response.content.strip()
 
-            sourceText = itemData.get("description", "")
-            itemId = await self.save_summary_to_qdrant(authKeyId, itemType, memoryText, sourceText)
+            memory_text, tags = self._parse_summary_and_tags(full_text)
+
+            source_text = itemData.get("description", "")
+            item_id = await self.save_summary_to_qdrant(
+                authKeyId, itemType, memory_text, source_text, tags
+            )
 
             return {
                 "status": "success",
-                "itemId": itemId,
-                "memoryText": memoryText
+                "itemId": item_id,
+                "memoryText": memory_text,
+                "tags": tags
             }
 
         except Exception as e:
@@ -61,7 +66,6 @@ class MemoryProcessorService:
             }
 
     def build_prompt(self, itemData: Dict, deceasedInfo: Dict, itemType: str) -> str:
-        """항목 유형에 따라 적절한 프롬프트 반환"""
         if itemType == "keepsake":
             return get_keepsake_memory_prompt(itemData, deceasedInfo)
         elif itemType == "photo":
@@ -69,14 +73,29 @@ class MemoryProcessorService:
         else:
             raise ValueError(f"지원하지 않는 itemType입니다: {itemType}")
 
+    def _parse_summary_and_tags(self, response_text: str) -> (str, list):
+        """응답에서 요약과 태그 추출"""
+        lines = response_text.strip().splitlines()
+        memory_lines = []
+        tags = []
+
+        for line in lines:
+            if line.strip().lower().startswith("태그:"):
+                tag_line = line.split(":", 1)[-1]
+                tags = [t.strip() for t in tag_line.split(",") if t.strip()]
+            else:
+                memory_lines.append(line.strip())
+
+        return " ".join(memory_lines), tags
+
     async def save_summary_to_qdrant(
         self,
         authKeyId: str,
         itemType: str,
         memoryText: str,
-        sourceText: str
+        sourceText: str,
+        tags: list
     ) -> str:
-        """Qdrant에 저장"""
         itemId = generate_item_id(itemType)
         createdAt = now_kst().isoformat()
 
@@ -88,10 +107,11 @@ class MemoryProcessorService:
             "source": f"{itemType}_TB",
             "date": createdAt[:10],
             "createdAt": createdAt,
-            "sourceText": sourceText
+            "sourceText": sourceText,
+            "tags": tags
         }
 
-        advanced_rag_service.upsert_document(
+        await advanced_rag_service.upsert_document(
             collection_name="memories",
             document={
                 "page_content": memoryText,
@@ -100,7 +120,3 @@ class MemoryProcessorService:
         )
 
         return itemId
-
-
-# 전역 인스턴스
-memory_processor = MemoryProcessorService()
