@@ -1,5 +1,4 @@
-
-name: Deploy Neverland AI to EC2
+name: Deploy Neverland AI (Resource Optimized)
 
 on:
   push:
@@ -10,12 +9,6 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v3
-
-      - name: Build Docker Image
-        run: docker build -t neverland-ai .
-
       - name: SSH & Deploy to EC2
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -23,33 +16,72 @@ jobs:
           username: ubuntu
           key: ${{ secrets.EC2_KEY }}
           port: 22
+          timeout: 60s
+          command_timeout: 8m
           script: |
-            echo " 프로젝트 디렉토리 이동 or 클론"
-            cd ~/neverland-ai || git clone https://github.com/Neverland0710/neverland-ai.git && cd neverland-ai
+            set -e
+            
+            echo " 시스템 리소스 확인"
+            echo "메모리: $(free -h | grep Mem | awk '{print $3"/"$2}')"
+            echo "CPU: $(top -bn1 | grep "Cpu(s)" | awk '{print $2}')"
+            echo "디스크: $(df -h / | tail -1 | awk '{print $5}')"
+            
+            echo " Docker 시스템 정리 (메모리 확보)"
+            docker system prune -af --volumes || true
+            docker stop neverland-ai || true
+            docker rm neverland-ai || true
+            
+            echo " 프로젝트 업데이트"
+            cd ~/neverland-ai && git pull origin main || (cd ~ && git clone https://github.com/Neverland0710/neverland-ai.git && cd neverland-ai)
+            
             echo " .env 파일 생성"
-            echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" > .env
-            echo "QDRANT_URL=${{ secrets.QDRANT_URL }}" >> .env
-            echo "QDRANT_API_KEY=${{ secrets.QDRANT_API_KEY }}" >> .env
-            echo "DAILY_COLLECTION=${{ secrets.DAILY_COLLECTION }}" >> .env
-            echo "LETTER_COLLECTION=${{ secrets.LETTER_COLLECTION }}" >> .env
-            echo "OBJECT_COLLECTION=${{ secrets.OBJECT_COLLECTION }}" >> .env
-            echo "MYSQL_HOST=${{ secrets.MYSQL_HOST }}" >> .env
-            echo "MYSQL_PORT=${{ secrets.MYSQL_PORT }}" >> .env
-            echo "MYSQL_USER=${{ secrets.MYSQL_USER }}" >> .env
-            echo "MYSQL_PASSWORD=${{ secrets.MYSQL_PASSWORD }}" >> .env
-            echo "MYSQL_DATABASE=${{ secrets.MYSQL_DATABASE }}" >> .env
-            echo "ELEVENLABS_API_KEY=${{ secrets.ELEVENLABS_API_KEY }}" >> .env
-            echo "LANGSMITH_API_KEY=${{ secrets.LANGSMITH_API_KEY }}" >> .env
-            echo "LANGSMITH_ENDPOINT=${{ secrets.LANGSMITH_ENDPOINT }}" >> .env
-            echo "LANGSMITH_PROJECT=${{ secrets.LANGSMITH_PROJECT }}" >> .env
-            echo " 기존 컨테이너 종료 및 삭제"
-            docker rm -f neverland-ai || true
-            echo " 최신 이미지 빌드 및 실행"
-            docker build -t neverland-ai .
+            cat > .env << 'EOF'
+            OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+            QDRANT_URL=${{ secrets.QDRANT_URL }}
+            QDRANT_API_KEY=${{ secrets.QDRANT_API_KEY }}
+            DAILY_COLLECTION=${{ secrets.DAILY_COLLECTION }}
+            LETTER_COLLECTION=${{ secrets.LETTER_COLLECTION }}
+            OBJECT_COLLECTION=${{ secrets.OBJECT_COLLECTION }}
+            MYSQL_HOST=${{ secrets.MYSQL_HOST }}
+            MYSQL_PORT=${{ secrets.MYSQL_PORT }}
+            MYSQL_USER=${{ secrets.MYSQL_USER }}
+            MYSQL_PASSWORD=${{ secrets.MYSQL_PASSWORD }}
+            MYSQL_DATABASE=${{ secrets.MYSQL_DATABASE }}
+            ELEVENLABS_API_KEY=${{ secrets.ELEVENLABS_API_KEY }}
+            LANGSMITH_API_KEY=${{ secrets.LANGSMITH_API_KEY }}
+            LANGSMITH_ENDPOINT=${{ secrets.LANGSMITH_ENDPOINT }}
+            LANGSMITH_PROJECT=${{ secrets.LANGSMITH_PROJECT }}
+            EOF
+            
+            echo " 제한된 리소스로 빌드"
+            # CPU 사용량 제한하여 빌드
+            docker build -t neverland-ai . --memory=512m --cpu-quota=50000
+            
+            echo " 리소스 제한 컨테이너 실행"
             docker run -d \
               -p 8000:8000 \
               --env-file .env \
-              --restart always \
+              --restart unless-stopped \
               --name neverland-ai \
+              --memory="800m" \
+              --memory-swap="1g" \
+              --cpus="0.7" \
+              --cpu-quota=70000 \
+              --cpu-period=100000 \
+              --oom-kill-disable=false \
               neverland-ai
-            echo " 배포 완료."
+            
+            echo " 점진적 헬스체크"
+            for i in {1..12}; do
+              echo "헬스체크 시도 $i/12"
+              if curl -f -m 5 http://localhost:8000/health >/dev/null 2>&1; then
+                echo " 서비스 정상 시작!"
+                break
+              fi
+              sleep 10
+            done
+            
+            echo " 최종 상태 확인"
+            docker ps | grep neverland-ai
+            echo "메모리 사용량: $(docker stats --no-stream --format 'table {{.MemUsage}}' neverland-ai)"
+            echo " 배포 완료 (리소스 최적화)"
