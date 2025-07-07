@@ -95,7 +95,7 @@ class VoiceResponseParser:
         if len(response) > 150:
             response = response[:147] + "..."
 
-        for bad in ["ㅋㅋ", "ㅎㅎ", "ㅠㅠ", "~", "."]:
+        for bad in ["ㅋㅋ", "ㅎㅎ", "ㅠㅠ", "~", ".","^^"]:
             response = response.replace(bad, "")
 
         return {
@@ -280,7 +280,7 @@ class VoiceChain:
         for m in memories[:2]:
             content = m['content'][:47] + "..." if len(m['content']) > 50 else m['content']
             memory_texts.append(f"{m.get('date_text', '언젠가')}에 {content}")
-        return "🎤 관련 기억:\n" + "\n".join(memory_texts)
+        return " 관련 기억:\n" + "\n".join(memory_texts)
 
     async def _save_voice_conversation(self, authKeyId: str, user_speech: str, ai_response: str):
         try:
