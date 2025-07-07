@@ -1,11 +1,8 @@
-# app/prompts/chat_prompts.py
 """
 실시간 대화용 프롬프트 템플릿
 """
 
-
 class ChatPrompts:
-    """대화 관련 프롬프트 모음"""
     RESPONSE_GENERATION = """
 사용자 발화:
 "{user_input}"
@@ -44,7 +41,10 @@ class ChatPrompts:
 현재 분위기: {emotion_tone}
 
 최종 출력 형식:
-응답 내용 | 분위기 분석 요약 | 위험도: LOW/HIGH
+요약: [대화 내용을 3~4문장으로 정리]  
+태그: [핵심 키워드 목록, 예: "딸, 도시락, 그리움"]  
+분위기: [응답 내용의 전반적 정서 요약]  
+위험도: LOW 또는 HIGH
 
 - 응답은 {relation_to_user}로서 자연스럽고 따뜻하게, 1-2문장으로 간결하게
 - 위험도는 자해/자살 관련 신호 감지 시 HIGH, 그 외 대부분은 LOW

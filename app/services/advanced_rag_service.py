@@ -73,7 +73,6 @@ class AdvancedRAGService:
             logger.info(f"🔍 RAG 검색 시작: query='{query}', authKeyId='{authKeyId}'")
             results = []
 
-            # 병렬 검색 수행
             letter_task = self.letter_memory_store.asimilarity_search_with_score(query, k=3)
             object_task = self.object_memory_store.asimilarity_search_with_score(query, k=3)
             daily_task = self.daily_conversation_store.asimilarity_search_with_score(query, k=3)
@@ -81,7 +80,7 @@ class AdvancedRAGService:
             letter_docs, object_docs, daily_docs = await asyncio.gather(
                 letter_task, object_task, daily_task
             )
-            
+
             logger.info(f" 검색 결과: letter={len(letter_docs)}, object={len(object_docs)}, daily={len(daily_docs)}")
 
             for docs, collection in [
@@ -100,23 +99,28 @@ class AdvancedRAGService:
                     })
 
             logger.info(f" 전체 검색 결과: {len(results)}개")
-            for r in results:
-                logger.info(f"  - {r['collection']} | score: {r['score']:.4f} | authKeyId: {r['metadata'].get('authKeyId', 'NONE')}")
+
+            def boost_score_with_tags(result, query):
+                tags = result["metadata"].get("tags", [])
+                if any(tag in query for tag in tags):
+                    return result["score"] + 0.05
+                return result["score"]
 
             filtered = [r for r in results if r["metadata"].get("authKeyId") == authKeyId]
             logger.info(f" authKeyId 필터 후: {len(filtered)}개")
 
-            RELEVANCE_THRESHOLD = 0.3  
+            RELEVANCE_THRESHOLD = 0.3
             relevant = [
                 r for r in filtered
                 if r["score"] is not None and r["score"] >= RELEVANCE_THRESHOLD
             ]
 
-            logger.info(f"⭐ 임계값 {RELEVANCE_THRESHOLD} 이상: {len(relevant)}개")
             for r in relevant:
-                logger.info(f"[{r['collection']} | score: {r['score']:.4f}] {r['date_text']} - {r['content'][:30]}...")
+                original = r["score"]
+                r["boosted_score"] = boost_score_with_tags(r, query)
+                logger.info(f"[{r['collection']}] {r['metadata'].get('tags', [])} | {original:.4f} → {r['boosted_score']:.4f}")
 
-            sorted_relevant = sorted(relevant, key=lambda x: -x["score"])
+            sorted_relevant = sorted(relevant, key=lambda x: -x["boosted_score"])
             return sorted_relevant[:3]
 
         except Exception as e:

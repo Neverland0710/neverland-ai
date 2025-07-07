@@ -183,14 +183,25 @@ class ChatChain:
         return ""
 
     def _should_skip_memory_search_by_content(self, user_input: str, history: DatabaseChatMessageHistory) -> bool:
+        cleaned = user_input.strip().lower()
+
+        # 너무 짧거나 무의미한 발화 (인사말, 감탄사 등)
+        skip_keywords = {"응", "그래", "알겠어", "고마워", "ㅎㅎ", "ㅋㅋ", "잘자", "하하", "헐", "음", "으응", "응응", "어"}
+        if len(cleaned) <= 2 or cleaned in skip_keywords:
+            logger.info(" 단순 응답 감지 → 기억 검색 생략")
+            return True
+
+        # 최근 AI 응답과 중복도 높은 경우 → 검색 생략
         recent_ai_msgs = [m.content.lower() for m in reversed(history.messages[-50:]) if isinstance(m, AIMessage)]
-        user_keywords = set(user_input.lower().split())
+        user_keywords = set(cleaned.split())
+
         for msg in recent_ai_msgs:
             msg_words = set(msg.split())
             overlap = user_keywords & msg_words
             if len(overlap) / max(len(user_keywords), 1) >= 0.6:
                 logger.info(" 최근 응답과 유사한 내용 발견 → 기억 검색 생략")
                 return True
+
         return False
 
     @traceable(name="generate_response")

@@ -38,9 +38,7 @@ class VoiceMessageHistory(BaseChatMessageHistory):
         if self._loaded:
             return
         try:
-            conversations = await database_service.get_recent_conversations(
-                self.session_id, limit=50
-            )
+            conversations = await database_service.get_recent_conversations(self.session_id, limit=50)
             for conv in conversations:
                 if conv["sender"] == "USER":
                     self._messages.append(HumanMessage(content=conv["message"]))
@@ -141,11 +139,9 @@ class VoiceChain:
                 age=lambda x: x["deceased_info"].get("age"),
                 user_name=lambda x: x["deceased_info"]["user_name"],
                 relation_to_user=lambda x: x["deceased_info"]["relation_to_user"],
-                conversation_history=lambda x: self._get_recent_voice_messages(
-                    self._get_voice_session_history(x["authKeyId"])
-                ),
+                conversation_history=lambda x: self._get_recent_voice_messages(self._get_voice_session_history(x["authKeyId"])),
                 date_text=lambda x: self._extract_date_text(x.get("memories", [])),
-                voice_emotion=lambda x: x.get("voice_emotion", "neutral"),
+                voice_emotion=lambda x: x.get("voice_emotion", "neutral")
             )
             | prompt_template
             | self.llm
@@ -190,6 +186,9 @@ class VoiceChain:
                 "previous_voice_analysis": self._get_last_voice_analysis(authKeyId)
             }
 
+            raw_memories = await self._search_voice_memories(input_data)
+            input_data["memories"] = raw_memories
+
             ai_output = await self.chain_with_history.ainvoke(
                 input_data,
                 config={"configurable": {"session_id": authKeyId}}
@@ -197,11 +196,7 @@ class VoiceChain:
 
             result = ai_output["output"]
 
-            await self._save_voice_conversation(
-                authKeyId, user_speech_text, result["response"]
-            )
-
-            raw_memories = await self._search_voice_memories(input_data)
+            await self._save_voice_conversation(authKeyId, user_speech_text, result["response"])
 
             return {
                 "status": "success",
