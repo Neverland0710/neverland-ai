@@ -25,28 +25,29 @@ class LetterChain:
 
     def _parse_summary_and_tags(self, response_text: str) -> Tuple[str, List[str]]:
         """GPT 응답에서 요약과 태그 추출"""
-        
         summary_match = re.search(r"요약\s*:\s*(.*?)\n", response_text, re.DOTALL)
         tags_match = re.search(r"태그\s*:\s*(.*)", response_text)
 
         summary = summary_match.group(1).strip() if summary_match else response_text.strip()
         tags_str = tags_match.group(1).strip() if tags_match else ""
         tags = [t.strip() for t in tags_str.split(",") if t.strip()]
-
         return summary, tags
 
     async def process_letter(self, letter_id: str, user_id: str, authKeyId: str, letter_text: str) -> LetterProcessInternalResult:
         try:
             start_time = time.time()
 
+            # 1. 고인 정보 로드
             deceased_info = await database_service.get_deceased_by_auth_key(authKeyId)
 
+            # 2. 프롬프트 준비
             summary_prompt = PromptTemplate.from_template(LetterPrompts.LETTER_SUMMARY)
             response_prompt = PromptTemplate.from_template(LetterPrompts.LETTER_RESPONSE)
 
             summary_chain = summary_prompt | self.llm | self.output_parser
             response_chain = response_prompt | self.llm | self.output_parser
 
+            # 3. GPT 응답 생성
             response_input = {
                 "title": "",
                 "content": letter_text,
@@ -58,6 +59,7 @@ class LetterChain:
             }
             response = await response_chain.ainvoke(response_input)
 
+            # 4. GPT 요약 생성
             summary_input = {
                 "user_letter": letter_text,
                 "ai_response": response,
@@ -65,9 +67,10 @@ class LetterChain:
                 "relation_to_user": deceased_info["relation_to_user"]
             }
             summary_raw = await summary_chain.ainvoke(summary_input)
-            summary, tags = self.parse_summary_and_tags(summary_raw)
+            summary, tags = self._parse_summary_and_tags(summary_raw)
 
-            store_result = await advanced_rag_service.store_memory(
+            # 5. Qdrant 저장
+            await advanced_rag_service.store_memory(
                 content=summary,
                 authKeyId=authKeyId,
                 memory_type="letter",
