@@ -52,4 +52,4 @@ jobs:
               --restart always \
               --name neverland-ai \
               neverland-ai
-            echo " 배포 완료"
+            echo " 배포 완료."
