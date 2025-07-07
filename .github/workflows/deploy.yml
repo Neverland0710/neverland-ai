@@ -1,84 +1,204 @@
-name: Deploy Neverland AI (Fixed)
+name: Deploy Neverland AI to EC2
 
 on:
   push:
     branches: [ "main" ]
+  workflow_dispatch:  # 수동 실행 옵션 추가
+
+env:
+  CONTAINER_NAME: neverland-ai
+  IMAGE_NAME: neverland-ai
+  APP_PORT: 8000
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-
+    
     steps:
-      - name: SSH & Deploy to EC2
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ubuntu
-          key: ${{ secrets.EC2_KEY }}
-          port: 22
-          timeout: 60s
-          command_timeout: 8m
-          script: |
-            set -e
-            
-            echo " 시스템 리소스 확인"
-            echo "메모리: $(free -h | grep Mem | awk '{print $3"/"$2}')"
-            echo "CPU: $(top -bn1 | grep "Cpu(s)" | awk '{print $2}')"
-            echo "디스크: $(df -h / | tail -1 | awk '{print $5}')"
-            
-            echo "🧹 Docker 시스템 정리 (메모리 확보)"
-            docker system prune -af --volumes || true
-            docker stop neverland-ai || true
-            docker rm neverland-ai || true
-            
-            echo " 프로젝트 업데이트"
-            cd ~/neverland-ai && git pull origin main || (cd ~ && git clone https://github.com/Neverland0710/neverland-ai.git && cd neverland-ai)
-            
-            echo " .env 파일 생성"
-            cat > .env << 'EOF'
-            OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
-            QDRANT_URL=${{ secrets.QDRANT_URL }}
-            QDRANT_API_KEY=${{ secrets.QDRANT_API_KEY }}
-            DAILY_COLLECTION=${{ secrets.DAILY_COLLECTION }}
-            LETTER_COLLECTION=${{ secrets.LETTER_COLLECTION }}
-            OBJECT_COLLECTION=${{ secrets.OBJECT_COLLECTION }}
-            MYSQL_HOST=${{ secrets.MYSQL_HOST }}
-            MYSQL_PORT=${{ secrets.MYSQL_PORT }}
-            MYSQL_USER=${{ secrets.MYSQL_USER }}
-            MYSQL_PASSWORD=${{ secrets.MYSQL_PASSWORD }}
-            MYSQL_DATABASE=${{ secrets.MYSQL_DATABASE }}
-            ELEVENLABS_API_KEY=${{ secrets.ELEVENLABS_API_KEY }}
-            LANGSMITH_API_KEY=${{ secrets.LANGSMITH_API_KEY }}
-            LANGSMITH_ENDPOINT=${{ secrets.LANGSMITH_ENDPOINT }}
-            LANGSMITH_PROJECT=${{ secrets.LANGSMITH_PROJECT }}
-            EOF
-            
-            echo " Docker 이미지 빌드 (캐시 활용)"
-            docker build -t neverland-ai .
-            
-            echo " 리소스 제한 컨테이너 실행"
-            docker run -d \
-              -p 8000:8000 \
-              --env-file .env \
-              --restart unless-stopped \
-              --name neverland-ai \
-              --memory="800m" \
-              --memory-swap="1g" \
-              --cpus="0.7" \
-              --oom-kill-disable=false \
-              neverland-ai
-            
-            echo " 점진적 헬스체크"
-            for i in {1..12}; do
-              echo "헬스체크 시도 $i/12"
-              if curl -f -m 5 http://localhost:8000/health >/dev/null 2>&1; then
-                echo " 서비스 정상 시작!"
-                break
-              fi
-              sleep 10
-            done
-            
-            echo " 최종 상태 확인"
-            docker ps | grep neverland-ai
-            echo "메모리 사용량: $(docker stats --no-stream --format 'table {{.MemUsage}}' neverland-ai)"
-            echo " 배포 완료 (리소스 최적화)"
+    - name: Checkout Repository
+      uses: actions/checkout@v4  # 최신 버전 사용
+      
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+      
+    - name: Build Docker Image Locally (for validation)
+      run: |
+        echo " Docker 이미지 빌드 테스트..."
+        docker build -t ${{ env.IMAGE_NAME }}:test .
+        echo " 이미지 빌드 성공"
+        
+    - name: SSH & Deploy to EC2
+      uses: appleboy/ssh-action@v1.0.3
+      with:
+        host: ${{ secrets.EC2_HOST }}
+        username: ubuntu
+        key: ${{ secrets.EC2_KEY }}
+        port: 22
+        timeout: 300s  # 타임아웃 추가
+        command_timeout: 60s
+        script: |
+          set -e  # 에러 발생 시 스크립트 중단
+          
+          echo " Neverland AI 배포 시작..."
+          echo " 시작 시간: $(date)"
+          
+          # 프로젝트 디렉토리 관리
+          PROJECT_DIR="$HOME/neverland-ai"
+          if [ -d "$PROJECT_DIR" ]; then
+            echo " 기존 프로젝트 디렉토리 발견, 업데이트 중..."
+            cd "$PROJECT_DIR"
+            git fetch origin
+            git reset --hard origin/main
+            git clean -fd
+          else
+            echo " 새 프로젝트 클론 중..."
+            git clone https://github.com/Neverland0710/neverland-ai.git "$PROJECT_DIR"
+            cd "$PROJECT_DIR"
+          fi
+          
+          echo " 소스코드 업데이트 완료"
+          
+          # 환경변수 파일 생성 (보안 강화)
+          echo " 환경변수 설정 중..."
+          cat > .env << 'EOF'
+          # OpenAI Configuration
+          OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+          
+          # Qdrant Vector Database
+          QDRANT_URL=${{ secrets.QDRANT_URL }}
+          QDRANT_API_KEY=${{ secrets.QDRANT_API_KEY }}
+          DAILY_COLLECTION=${{ secrets.DAILY_COLLECTION }}
+          LETTER_COLLECTION=${{ secrets.LETTER_COLLECTION }}
+          OBJECT_COLLECTION=${{ secrets.OBJECT_COLLECTION }}
+          
+          # MySQL Database
+          MYSQL_HOST=${{ secrets.MYSQL_HOST }}
+          MYSQL_PORT=${{ secrets.MYSQL_PORT }}
+          MYSQL_USER=${{ secrets.MYSQL_USER }}
+          MYSQL_PASSWORD=${{ secrets.MYSQL_PASSWORD }}
+          MYSQL_DATABASE=${{ secrets.MYSQL_DATABASE }}
+          
+          # ElevenLabs TTS
+          ELEVENLABS_API_KEY=${{ secrets.ELEVENLABS_API_KEY }}
+          
+          # LangSmith Monitoring
+          LANGSMITH_API_KEY=${{ secrets.LANGSMITH_API_KEY }}
+          LANGSMITH_ENDPOINT=${{ secrets.LANGSMITH_ENDPOINT }}
+          LANGSMITH_PROJECT=${{ secrets.LANGSMITH_PROJECT }}
+          
+          # Application Settings
+          ENVIRONMENT=production
+          DEBUG=false
+          LOG_LEVEL=INFO
+          EOF
+          
+          # 파일 권한 보안 설정
+          chmod 600 .env
+          echo " 환경변수 파일 생성 완료"
+          
+          # 기존 컨테이너 안전하게 종료
+          echo " 기존 서비스 정리 중..."
+          if docker ps -q --filter "name=${{ env.CONTAINER_NAME }}" | grep -q .; then
+            echo "기존 컨테이너 종료 중..."
+            docker stop ${{ env.CONTAINER_NAME }} || true
+            sleep 5  # 안전한 종료를 위한 대기
+          fi
+          
+          # 기존 컨테이너 및 이미지 정리
+          docker rm -f ${{ env.CONTAINER_NAME }} || true
+          docker rmi -f ${{ env.IMAGE_NAME }} || true
+          
+          # 사용하지 않는 Docker 리소스 정리
+          docker system prune -f --volumes
+          
+          echo " 기존 리소스 정리 완료"
+          
+          # 새 이미지 빌드
+          echo " 새 Docker 이미지 빌드 중..."
+          docker build -t ${{ env.IMAGE_NAME }} . --no-cache
+          
+          if [ $? -ne 0 ]; then
+            echo " Docker 이미지 빌드 실패"
+            exit 1
+          fi
+          
+          echo " Docker 이미지 빌드 완료"
+          
+          # 헬스체크 스크립트 생성
+          cat > healthcheck.sh << 'HEALTHCHECK_EOF'
+          #!/bin/bash
+          echo " 서비스 헬스체크 시작..."
+          
+          for i in {1..30}; do
+            echo "시도 $i/30..."
+            if curl -f http://localhost:${{ env.APP_PORT }}/health > /dev/null 2>&1; then
+              echo " 서비스가 정상적으로 시작되었습니다!"
+              exit 0
+            fi
+            sleep 2
+          done
+          
+          echo " 서비스 시작 실패 - 헬스체크 타임아웃"
+          docker logs ${{ env.CONTAINER_NAME }} --tail 20
+          exit 1
+          HEALTHCHECK_EOF
+          
+          chmod +x healthcheck.sh
+          
+          # 컨테이너 실행
+          echo " 새 컨테이너 시작 중..."
+          docker run -d \
+            -p ${{ env.APP_PORT }}:${{ env.APP_PORT }} \
+            --env-file .env \
+            --restart always \
+            --name ${{ env.CONTAINER_NAME }} \
+            --health-cmd="curl -f http://localhost:${{ env.APP_PORT }}/health || exit 1" \
+            --health-interval=30s \
+            --health-timeout=10s \
+            --health-retries=3 \
+            --health-start-period=40s \
+            --memory=2g \
+            --cpus=1.0 \
+            --log-driver=json-file \
+            --log-opt max-size=100m \
+            --log-opt max-file=3 \
+            ${{ env.IMAGE_NAME }}
+          
+          if [ $? -ne 0 ]; then
+            echo " 컨테이너 시작 실패"
+            exit 1
+          fi
+          
+          echo " 서비스 시작 대기 중..."
+          sleep 10
+          
+          # 헬스체크 실행
+          ./healthcheck.sh
+          
+          # 배포 정보 출력
+          echo ""
+          echo " 배포 완료!"
+          echo " 완료 시간: $(date)"
+          echo " 컨테이너 ID: $(docker ps -q --filter name=${{ env.CONTAINER_NAME }})"
+          echo " 서비스 URL: http://${{ secrets.EC2_HOST }}:${{ env.APP_PORT }}"
+          echo " 서비스 상태:"
+          docker ps --filter name=${{ env.CONTAINER_NAME }} --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+          
+          # 최종 상태 확인
+          if docker ps --filter name=${{ env.CONTAINER_NAME }} --filter status=running -q | grep -q .; then
+            echo " 배포 성공: 서비스가 정상 실행 중입니다"
+          else
+            echo " 배포 실패: 서비스가 실행되지 않습니다"
+            echo "컨테이너 로그:"
+            docker logs ${{ env.CONTAINER_NAME }} --tail 50
+            exit 1
+          fi
+
+    - name: Deployment Status Notification
+      if: always()
+      run: |
+        if [ "${{ job.status }}" == "success" ]; then
+          echo " 배포 성공! Neverland AI가 EC2에서 실행 중입니다."
+        else
+          echo " 배포 실패! 로그를 확인해주세요."
+        fi
