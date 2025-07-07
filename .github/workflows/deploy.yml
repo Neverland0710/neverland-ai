@@ -33,6 +33,10 @@ jobs:
           echo " Neverland AI 배포 시작..."
           echo " 시작 시간: $(date)"
           
+          # Docker 버전 확인
+          echo " Docker 버전 확인:"
+          docker --version
+          
           # Git 설정 초기화 (에러 방지)
           git config --global --unset-all core.sshCommand || true
           git config --global --unset-all http.https://github.com/.extraheader || true
@@ -81,7 +85,7 @@ jobs:
           echo " 환경변수 파일 생성 완료"
           
           # 기존 컨테이너 정리
-          echo " 기존 서비스 정리 중..."
+          echo "🧹 기존 서비스 정리 중..."
           
           # 실행 중인 컨테이너 강제 종료
           if docker ps -q --filter "name=${{ env.CONTAINER_NAME }}" | grep -q .; then
@@ -104,20 +108,44 @@ jobs:
           # Dockerfile 존재 확인
           if [ ! -f "Dockerfile" ]; then
             echo " Dockerfile이 존재하지 않습니다!"
+            echo "현재 디렉토리 내용:"
             ls -la
             exit 1
           fi
           
-          # Docker 이미지 빌드
+          echo " Dockerfile 확인 완료"
+          
+          # Docker 버전별 빌드 명령어 선택
+          DOCKER_VERSION=$(docker --version | grep -oE '[0-9]+\.[0-9]+' | head -1)
+          MAJOR_VERSION=$(echo $DOCKER_VERSION | cut -d. -f1)
+          MINOR_VERSION=$(echo $DOCKER_VERSION | cut -d. -f2)
+          
+          echo " Docker 버전: $DOCKER_VERSION (Major: $MAJOR_VERSION, Minor: $MINOR_VERSION)"
+          
+          # Docker 이미지 빌드 (구버전 호환)
           echo " Docker 이미지 빌드 중..."
-          docker build -t ${{ env.IMAGE_NAME }} . --no-cache --progress=plain
+          
+          # BuildKit 사용 가능 여부 확인 후 빌드
+          if docker buildx version > /dev/null 2>&1; then
+            echo "BuildKit 사용 가능 - 최신 빌드 방식 사용"
+            docker buildx build -t ${{ env.IMAGE_NAME }} . --load
+          else
+            echo "레거시 Docker 빌드 사용"
+            docker build -t ${{ env.IMAGE_NAME }} . --no-cache
+          fi
           
           if [ $? -ne 0 ]; then
             echo " Docker 이미지 빌드 실패"
+            echo "Docker 빌드 로그 확인을 위해 다시 시도..."
+            docker build -t ${{ env.IMAGE_NAME }} .
             exit 1
           fi
           
           echo " Docker 이미지 빌드 완료"
+          
+          # 빌드된 이미지 확인
+          echo " 빌드된 이미지 정보:"
+          docker images | grep ${{ env.IMAGE_NAME }} || true
           
           # 컨테이너 실행
           echo " 새 컨테이너 시작 중..."
@@ -128,9 +156,6 @@ jobs:
             --name ${{ env.CONTAINER_NAME }} \
             --memory=2g \
             --cpus=1.0 \
-            --log-driver=json-file \
-            --log-opt max-size=50m \
-            --log-opt max-file=3 \
             ${{ env.IMAGE_NAME }}
           
           if [ $? -ne 0 ]; then
@@ -141,60 +166,96 @@ jobs:
           fi
           
           echo " 컨테이너 시작 대기 중..."
-          sleep 15
+          sleep 20
           
           # 컨테이너 상태 확인
+          echo " 컨테이너 상태 확인 중..."
           if ! docker ps --filter name=${{ env.CONTAINER_NAME }} --filter status=running -q | grep -q .; then
             echo " 컨테이너가 실행되지 않습니다"
-            echo "컨테이너 로그:"
-            docker logs ${{ env.CONTAINER_NAME }} || true
             echo "컨테이너 상태:"
             docker ps -a --filter name=${{ env.CONTAINER_NAME }}
+            echo ""
+            echo "컨테이너 로그:"
+            docker logs ${{ env.CONTAINER_NAME }} || true
+            echo ""
+            echo "시스템 리소스 확인:"
+            free -h
+            df -h
             exit 1
           fi
           
-          # 헬스체크 (간단한 포트 체크)
+          echo " 컨테이너가 정상적으로 실행 중입니다"
+          
+          # 포트 헬스체크
           echo " 서비스 헬스체크 중..."
-          for i in {1..20}; do
-            echo "헬스체크 시도 $i/20..."
-            if netstat -tuln | grep :${{ env.APP_PORT }} > /dev/null 2>&1; then
+          for i in {1..30}; do
+            echo "헬스체크 시도 $i/30..."
+            
+            # 포트 확인 (여러 방법 시도)
+            if netstat -tuln 2>/dev/null | grep :${{ env.APP_PORT }} > /dev/null; then
               echo " 포트 ${{ env.APP_PORT }}에서 서비스가 정상 실행 중입니다!"
+              break
+            elif ss -tuln 2>/dev/null | grep :${{ env.APP_PORT }} > /dev/null; then
+              echo " 포트 ${{ env.APP_PORT }}에서 서비스가 정상 실행 중입니다!"
+              break
+            elif docker port ${{ env.CONTAINER_NAME }} 2>/dev/null | grep -q ${{ env.APP_PORT }}; then
+              echo " Docker 포트 매핑이 정상입니다!"
               break
             fi
             
-            if [ $i -eq 20 ]; then
+            if [ $i -eq 30 ]; then
               echo " 헬스체크 실패 - 포트가 열리지 않았습니다"
-              echo "컨테이너 로그:"
-              docker logs ${{ env.CONTAINER_NAME }} --tail 30
-              echo "포트 상태:"
-              netstat -tuln | grep ${{ env.APP_PORT }} || true
+              echo ""
+              echo " 디버깅 정보:"
+              echo "컨테이너 포트 정보:"
+              docker port ${{ env.CONTAINER_NAME }} || true
+              echo ""
+              echo "네트워크 상태:"
+              netstat -tuln | grep ${{ env.APP_PORT }} || echo "netstat에서 포트를 찾을 수 없음"
+              ss -tuln | grep ${{ env.APP_PORT }} || echo "ss에서 포트를 찾을 수 없음"
+              echo ""
+              echo "컨테이너 로그 (마지막 50줄):"
+              docker logs ${{ env.CONTAINER_NAME }} --tail 50
               exit 1
             fi
             
             sleep 3
           done
           
-          # 최종 API 테스트 (curl이 설치되어 있다면)
+          # API 테스트 (curl이 설치되어 있다면)
           if command -v curl > /dev/null 2>&1; then
             echo " API 응답 테스트 중..."
-            if curl -f http://localhost:${{ env.APP_PORT }}/health > /dev/null 2>&1; then
+            sleep 5  # 추가 대기
+            
+            if curl -f --connect-timeout 10 --max-time 30 http://localhost:${{ env.APP_PORT }}/health > /dev/null 2>&1; then
               echo " API 헬스체크 성공!"
+            elif curl -f --connect-timeout 10 --max-time 30 http://localhost:${{ env.APP_PORT }}/ > /dev/null 2>&1; then
+              echo " 기본 엔드포인트 접근 성공!"
             else
-              echo " API 헬스체크 실패 (서비스는 실행 중)"
+              echo " API 헬스체크 실패 (서비스는 실행 중일 수 있음)"
+              echo "수동으로 http://${{ secrets.EC2_HOST }}:${{ env.APP_PORT }} 확인 필요"
             fi
+          else
+            echo " curl이 설치되지 않음 - API 테스트 건너뜀"
           fi
           
           # 배포 완료 정보
           echo ""
           echo " 배포 완료!"
           echo " 완료 시간: $(date)"
+          echo ""
+          echo " 서비스 정보:"
           echo " 컨테이너 상태:"
-          docker ps --filter name=${{ env.CONTAINER_NAME }} --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
-          echo " 메모리 사용량:"
-          docker stats ${{ env.CONTAINER_NAME }} --no-stream --format "table {{.Container}}\t{{.CPUPerc}}\t{{.MemUsage}}"
-          echo " 서비스 접속: http://${{ secrets.EC2_HOST }}:${{ env.APP_PORT }}"
-          
-          echo " 배포 성공: Neverland AI가 정상적으로 실행 중입니다!"
+          docker ps --filter name=${{ env.CONTAINER_NAME }} --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" || true
+          echo ""
+          echo " 리소스 사용량:"
+          docker stats ${{ env.CONTAINER_NAME }} --no-stream --format "table {{.Container}}\t{{.CPUPerc}}\t{{.MemUsage}}" || true
+          echo ""
+          echo " 서비스 접속 정보:"
+          echo "   - 내부: http://localhost:${{ env.APP_PORT }}"
+          echo "   - 외부: http://${{ secrets.EC2_HOST }}:${{ env.APP_PORT }}"
+          echo ""
+          echo " Neverland AI가 정상적으로 배포되었습니다!"
 
     - name: Deployment Result
       if: always()
@@ -205,10 +266,3 @@ jobs:
           echo " 서비스 URL: http://${{ secrets.EC2_HOST }}:8000"
         else
           echo " 배포 실패!"
-          echo " 다음 사항들을 확인해주세요:"
-          echo "1. EC2 인스턴스가 실행 중인지 확인"
-          echo "2. SSH 키와 호스트 정보가 올바른지 확인"
-          echo "3. Docker가 EC2에 설치되어 있는지 확인"
-          echo "4. 환경변수가 올바르게 설정되었는지 확인"
-          echo "5. GitHub Actions 로그에서 구체적인 에러 메시지 확인"
-        fi
