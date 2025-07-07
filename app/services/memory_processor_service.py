@@ -3,7 +3,7 @@
 기억 변환 서비스 - 유품, 사진 전용 변환 + Qdrant 저장
 """
 
-from typing import Dict
+from typing import Tuple, List, Dict
 from uuid import uuid4
 from datetime import datetime, timezone, timedelta
 
@@ -73,7 +73,7 @@ class MemoryProcessorService:
         else:
             raise ValueError(f"지원하지 않는 itemType입니다: {itemType}")
 
-    def _parse_summary_and_tags(self, response_text: str) -> (str, list):
+    def _parse_summary_and_tags(self, response_text: str) -> Tuple[str, List[str]]:
         """응답에서 요약과 태그 추출"""
         lines = response_text.strip().splitlines()
         memory_lines = []

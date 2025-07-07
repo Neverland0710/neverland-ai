@@ -1,7 +1,7 @@
 from datetime import datetime
 import time
 import re
-
+from typing import Tuple, List
 from langchain.prompts import PromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain_openai import ChatOpenAI
@@ -23,14 +23,16 @@ class LetterChain:
         )
         self.output_parser = StrOutputParser()
 
-    def parse_summary_and_tags(self, raw_text: str) -> (str, list):
+    def _parse_summary_and_tags(self, response_text: str) -> Tuple[str, List[str]]:
         """GPT 응답에서 요약과 태그 추출"""
-        summary_match = re.search(r"요약:\s*(.*?)\n", raw_text, re.DOTALL)
-        tags_match = re.search(r"태그:\s*(.*)", raw_text)
+        
+        summary_match = re.search(r"요약\s*:\s*(.*?)\n", response_text, re.DOTALL)
+        tags_match = re.search(r"태그\s*:\s*(.*)", response_text)
 
-        summary = summary_match.group(1).strip() if summary_match else raw_text.strip()
+        summary = summary_match.group(1).strip() if summary_match else response_text.strip()
         tags_str = tags_match.group(1).strip() if tags_match else ""
         tags = [t.strip() for t in tags_str.split(",") if t.strip()]
+
         return summary, tags
 
     async def process_letter(self, letter_id: str, user_id: str, authKeyId: str, letter_text: str) -> LetterProcessInternalResult:
