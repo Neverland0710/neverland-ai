@@ -25,7 +25,7 @@ async def process_keepsake_memory(request: ProcessKeepsakeRequest):
         if not deceased_info:
             raise HTTPException(status_code=404, detail="고인 정보를 찾을 수 없습니다.")
 
-        memory_result = await memory_processor.convert_to_memory(
+        memory_result = await MemoryProcessorService.convert_to_memory(
             item_data=keepsake_data,
             deceased_info=deceased_info,
             item_type="keepsake",
@@ -58,7 +58,7 @@ async def process_photo_memory(request: ProcessPhotoRequest):
         if not deceased_info:
             raise HTTPException(status_code=404, detail="고인 정보를 찾을 수 없습니다.")
 
-        memory_result = await memory_processor.convert_to_memory(
+        memory_result = await MemoryProcessorService.convert_to_memory(
             item_data=photo_data,
             deceased_info=deceased_info,
             item_type="photo",
