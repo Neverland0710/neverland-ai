@@ -37,32 +37,34 @@ class LetterChain:
         try:
             start_time = time.time()
 
-            # 1. 고인 정보 로드
+            # 1. 고인 정보 조회
             deceased_info = await database_service.get_deceased_by_auth_key(authKeyId)
 
-            # 2. 프롬프트 준비
+            # 2. 프롬프트 템플릿 준비
             summary_prompt = PromptTemplate.from_template(LetterPrompts.LETTER_SUMMARY)
             response_prompt = PromptTemplate.from_template(LetterPrompts.LETTER_RESPONSE)
 
             summary_chain = summary_prompt | self.llm | self.output_parser
             response_chain = response_prompt | self.llm | self.output_parser
 
-            # 3. GPT 응답 생성
+            # 3. 답장 생성
             response_input = {
                 "title": "",
                 "content": letter_text,
+                "user_name": deceased_info["user_name"],
                 "deceased_name": deceased_info["name"],
                 "relation_to_user": deceased_info["relation_to_user"],
                 "personality": deceased_info["personality"],
                 "speaking_style": deceased_info["speaking_style"],
-                "memory_context": ""
+                "memory_context": "",
             }
             response = await response_chain.ainvoke(response_input)
 
-            # 4. GPT 요약 생성
+            # 4. 요약 + 태그 생성
             summary_input = {
                 "user_letter": letter_text,
                 "ai_response": response,
+                "user_name": deceased_info["user_name"],
                 "deceased_name": deceased_info["name"],
                 "relation_to_user": deceased_info["relation_to_user"]
             }

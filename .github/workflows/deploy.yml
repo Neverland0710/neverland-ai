@@ -16,52 +16,91 @@ jobs:
           username: ubuntu
           key: ${{ secrets.EC2_KEY }}
           port: 22
-          timeout: 30s
+          timeout: 60s
           command_timeout: 15m
           script: |
-            echo "📁 프로젝트 디렉토리 설정"
+            set -e
             
-            # 안전한 디렉토리 처리
-            if [ -d "~/neverland-ai" ]; then
+            echo " 현재 환경 확인"
+            echo "사용자: $(whoami)"
+            echo "홈 디렉토리: $HOME"
+            echo "현재 디렉토리: $(pwd)"
+            
+            echo " 프로젝트 디렉토리 설정"
+            PROJECT_DIR="$HOME/neverland-ai"
+            
+            # 절대 경로 사용으로 확실한 디렉토리 처리
+            if [ -d "$PROJECT_DIR" ]; then
               echo "기존 디렉토리로 이동 및 업데이트"
-              cd ~/neverland-ai
+              cd "$PROJECT_DIR"
+              git fetch origin
+              git reset --hard origin/main
               git pull origin main
             else
               echo "새 프로젝트 클론"
-              git clone https://github.com/Neverland0710/neverland-ai.git ~/neverland-ai
-              cd ~/neverland-ai
+              git clone https://github.com/Neverland0710/neverland-ai.git "$PROJECT_DIR"
+              cd "$PROJECT_DIR"
             fi
-
-            echo "🔐 .env 파일 생성"
-            echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" > .env
-            echo "QDRANT_URL=${{ secrets.QDRANT_URL }}" >> .env
-            echo "QDRANT_API_KEY=${{ secrets.QDRANT_API_KEY }}" >> .env
-            echo "DAILY_COLLECTION=${{ secrets.DAILY_COLLECTION }}" >> .env
-            echo "LETTER_COLLECTION=${{ secrets.LETTER_COLLECTION }}" >> .env
-            echo "OBJECT_COLLECTION=${{ secrets.OBJECT_COLLECTION }}" >> .env
-            echo "MYSQL_HOST=${{ secrets.MYSQL_HOST }}" >> .env
-            echo "MYSQL_PORT=${{ secrets.MYSQL_PORT }}" >> .env
-            echo "MYSQL_USER=${{ secrets.MYSQL_USER }}" >> .env
-            echo "MYSQL_PASSWORD=${{ secrets.MYSQL_PASSWORD }}" >> .env
-            echo "MYSQL_DATABASE=${{ secrets.MYSQL_DATABASE }}" >> .env
-            echo "ELEVENLABS_API_KEY=${{ secrets.ELEVENLABS_API_KEY }}" >> .env
-            echo "LANGSMITH_API_KEY=${{ secrets.LANGSMITH_API_KEY }}" >> .env
-            echo "LANGSMITH_ENDPOINT=${{ secrets.LANGSMITH_ENDPOINT }}" >> .env
-            echo "LANGSMITH_PROJECT=${{ secrets.LANGSMITH_PROJECT }}" >> .env
-
-            echo "🧹 기존 컨테이너 정리"
-            docker stop neverland-ai || true
-            docker rm neverland-ai || true
-
-            echo "🛠️ 최신 이미지 빌드"
-            docker build -t neverland-ai .
             
-            echo "🚀 컨테이너 실행"
+            echo "현재 작업 디렉토리: $(pwd)"
+            echo "프로젝트 파일 확인:"
+            ls -la
+            
+            echo " .env 파일 생성"
+            cat > .env << 'EOF'
+            OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+            QDRANT_URL=${{ secrets.QDRANT_URL }}
+            QDRANT_API_KEY=${{ secrets.QDRANT_API_KEY }}
+            DAILY_COLLECTION=${{ secrets.DAILY_COLLECTION }}
+            LETTER_COLLECTION=${{ secrets.LETTER_COLLECTION }}
+            OBJECT_COLLECTION=${{ secrets.OBJECT_COLLECTION }}
+            MYSQL_HOST=${{ secrets.MYSQL_HOST }}
+            MYSQL_PORT=${{ secrets.MYSQL_PORT }}
+            MYSQL_USER=${{ secrets.MYSQL_USER }}
+            MYSQL_PASSWORD=${{ secrets.MYSQL_PASSWORD }}
+            MYSQL_DATABASE=${{ secrets.MYSQL_DATABASE }}
+            ELEVENLABS_API_KEY=${{ secrets.ELEVENLABS_API_KEY }}
+            LANGSMITH_API_KEY=${{ secrets.LANGSMITH_API_KEY }}
+            LANGSMITH_ENDPOINT=${{ secrets.LANGSMITH_ENDPOINT }}
+            LANGSMITH_PROJECT=${{ secrets.LANGSMITH_PROJECT }}
+            EOF
+            
+            echo "🧹 기존 컨테이너 정리"
+            if docker ps -q -f name=neverland-ai >/dev/null 2>&1; then
+              echo "실행 중인 컨테이너 중지"
+              docker stop neverland-ai
+            fi
+            
+            if docker ps -aq -f name=neverland-ai >/dev/null 2>&1; then
+              echo "기존 컨테이너 삭제"
+              docker rm neverland-ai
+            fi
+            
+            echo " 최신 이미지 빌드"
+            docker build -t neverland-ai . --no-cache
+            
+            echo " 컨테이너 실행"
             docker run -d \
               -p 8000:8000 \
               --env-file .env \
-              --restart always \
+              --restart unless-stopped \
               --name neverland-ai \
               neverland-ai
-
-            echo "🚀 배포 완료"
+            
+            echo " 컨테이너 시작 확인 (30초 대기)"
+            sleep 30
+            
+            echo " 배포 상태 확인"
+            if docker ps | grep neverland-ai | grep -q "Up"; then
+              echo " 배포 성공!"
+              echo "컨테이너 상태:"
+              docker ps | grep neverland-ai
+              echo "최근 로그:"
+              docker logs --tail=10 neverland-ai
+            else
+              echo " 배포 실패, 전체 로그 확인:"
+              docker logs neverland-ai
+              exit 1
+            fi
+            
+            echo " 배포 완료!"
