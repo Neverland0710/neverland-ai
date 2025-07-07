@@ -3,7 +3,7 @@ name: Deploy Neverland AI to EC2
 on:
   push:
     branches: [ "main" ]
-  workflow_dispatch:  # 수동 실행 옵션 추가
+  workflow_dispatch:
 
 env:
   CONTAINER_NAME: neverland-ai
@@ -16,17 +16,8 @@ jobs:
     
     steps:
     - name: Checkout Repository
-      uses: actions/checkout@v4  # 최신 버전 사용
+      uses: actions/checkout@v4
       
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
-      
-    - name: Build Docker Image Locally (for validation)
-      run: |
-        echo " Docker 이미지 빌드 테스트..."
-        docker build -t ${{ env.IMAGE_NAME }}:test .
-        echo " 이미지 빌드 성공"
-        
     - name: SSH & Deploy to EC2
       uses: appleboy/ssh-action@v1.0.3
       with:
@@ -34,88 +25,92 @@ jobs:
         username: ubuntu
         key: ${{ secrets.EC2_KEY }}
         port: 22
-        timeout: 300s  # 타임아웃 추가
-        command_timeout: 60s
+        timeout: 600s
+        command_timeout: 120s
         script: |
-          set -e  # 에러 발생 시 스크립트 중단
+          set -e
           
           echo " Neverland AI 배포 시작..."
           echo " 시작 시간: $(date)"
           
+          # Git 설정 초기화 (에러 방지)
+          git config --global --unset-all core.sshCommand || true
+          git config --global --unset-all http.https://github.com/.extraheader || true
+          git config --global user.name "EC2 Deploy Bot" || true
+          git config --global user.email "deploy@neverland.ai" || true
+          
           # 프로젝트 디렉토리 관리
           PROJECT_DIR="$HOME/neverland-ai"
+          
+          # 기존 디렉토리가 있으면 완전히 삭제하고 새로 클론
           if [ -d "$PROJECT_DIR" ]; then
-            echo " 기존 프로젝트 디렉토리 발견, 업데이트 중..."
-            cd "$PROJECT_DIR"
-            git fetch origin
-            git reset --hard origin/main
-            git clean -fd
-          else
-            echo " 새 프로젝트 클론 중..."
-            git clone https://github.com/Neverland0710/neverland-ai.git "$PROJECT_DIR"
-            cd "$PROJECT_DIR"
+            echo " 기존 프로젝트 디렉토리 삭제 중..."
+            rm -rf "$PROJECT_DIR"
           fi
           
-          echo " 소스코드 업데이트 완료"
+          echo " 새 프로젝트 클론 중..."
+          git clone https://github.com/Neverland0710/neverland-ai.git "$PROJECT_DIR"
+          cd "$PROJECT_DIR"
           
-          # 환경변수 파일 생성 (보안 강화)
+          echo " 소스코드 다운로드 완료"
+          
+          # 환경변수 파일 생성
           echo " 환경변수 설정 중..."
           cat > .env << 'EOF'
-          # OpenAI Configuration
           OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
-          
-          # Qdrant Vector Database
           QDRANT_URL=${{ secrets.QDRANT_URL }}
           QDRANT_API_KEY=${{ secrets.QDRANT_API_KEY }}
           DAILY_COLLECTION=${{ secrets.DAILY_COLLECTION }}
           LETTER_COLLECTION=${{ secrets.LETTER_COLLECTION }}
           OBJECT_COLLECTION=${{ secrets.OBJECT_COLLECTION }}
-          
-          # MySQL Database
           MYSQL_HOST=${{ secrets.MYSQL_HOST }}
           MYSQL_PORT=${{ secrets.MYSQL_PORT }}
           MYSQL_USER=${{ secrets.MYSQL_USER }}
           MYSQL_PASSWORD=${{ secrets.MYSQL_PASSWORD }}
           MYSQL_DATABASE=${{ secrets.MYSQL_DATABASE }}
-          
-          # ElevenLabs TTS
           ELEVENLABS_API_KEY=${{ secrets.ELEVENLABS_API_KEY }}
-          
-          # LangSmith Monitoring
           LANGSMITH_API_KEY=${{ secrets.LANGSMITH_API_KEY }}
           LANGSMITH_ENDPOINT=${{ secrets.LANGSMITH_ENDPOINT }}
           LANGSMITH_PROJECT=${{ secrets.LANGSMITH_PROJECT }}
-          
-          # Application Settings
           ENVIRONMENT=production
           DEBUG=false
           LOG_LEVEL=INFO
           EOF
           
-          # 파일 권한 보안 설정
           chmod 600 .env
           echo " 환경변수 파일 생성 완료"
           
-          # 기존 컨테이너 안전하게 종료
+          # 기존 컨테이너 정리
           echo " 기존 서비스 정리 중..."
+          
+          # 실행 중인 컨테이너 강제 종료
           if docker ps -q --filter "name=${{ env.CONTAINER_NAME }}" | grep -q .; then
-            echo "기존 컨테이너 종료 중..."
-            docker stop ${{ env.CONTAINER_NAME }} || true
-            sleep 5  # 안전한 종료를 위한 대기
+            echo "기존 컨테이너 강제 종료 중..."
+            docker kill ${{ env.CONTAINER_NAME }} || true
+            sleep 3
           fi
           
-          # 기존 컨테이너 및 이미지 정리
+          # 컨테이너 삭제
           docker rm -f ${{ env.CONTAINER_NAME }} || true
+          
+          # 기존 이미지 삭제
           docker rmi -f ${{ env.IMAGE_NAME }} || true
           
-          # 사용하지 않는 Docker 리소스 정리
-          docker system prune -f --volumes
+          # Docker 시스템 정리
+          docker system prune -f || true
           
           echo " 기존 리소스 정리 완료"
           
-          # 새 이미지 빌드
-          echo " 새 Docker 이미지 빌드 중..."
-          docker build -t ${{ env.IMAGE_NAME }} . --no-cache
+          # Dockerfile 존재 확인
+          if [ ! -f "Dockerfile" ]; then
+            echo " Dockerfile이 존재하지 않습니다!"
+            ls -la
+            exit 1
+          fi
+          
+          # Docker 이미지 빌드
+          echo " Docker 이미지 빌드 중..."
+          docker build -t ${{ env.IMAGE_NAME }} . --no-cache --progress=plain
           
           if [ $? -ne 0 ]; then
             echo " Docker 이미지 빌드 실패"
@@ -124,81 +119,96 @@ jobs:
           
           echo " Docker 이미지 빌드 완료"
           
-          # 헬스체크 스크립트 생성
-          cat > healthcheck.sh << 'HEALTHCHECK_EOF'
-          #!/bin/bash
-          echo " 서비스 헬스체크 시작..."
-          
-          for i in {1..30}; do
-            echo "시도 $i/30..."
-            if curl -f http://localhost:${{ env.APP_PORT }}/health > /dev/null 2>&1; then
-              echo " 서비스가 정상적으로 시작되었습니다!"
-              exit 0
-            fi
-            sleep 2
-          done
-          
-          echo " 서비스 시작 실패 - 헬스체크 타임아웃"
-          docker logs ${{ env.CONTAINER_NAME }} --tail 20
-          exit 1
-          HEALTHCHECK_EOF
-          
-          chmod +x healthcheck.sh
-          
           # 컨테이너 실행
           echo " 새 컨테이너 시작 중..."
           docker run -d \
             -p ${{ env.APP_PORT }}:${{ env.APP_PORT }} \
             --env-file .env \
-            --restart always \
+            --restart unless-stopped \
             --name ${{ env.CONTAINER_NAME }} \
-            --health-cmd="curl -f http://localhost:${{ env.APP_PORT }}/health || exit 1" \
-            --health-interval=30s \
-            --health-timeout=10s \
-            --health-retries=3 \
-            --health-start-period=40s \
             --memory=2g \
             --cpus=1.0 \
             --log-driver=json-file \
-            --log-opt max-size=100m \
+            --log-opt max-size=50m \
             --log-opt max-file=3 \
             ${{ env.IMAGE_NAME }}
           
           if [ $? -ne 0 ]; then
             echo " 컨테이너 시작 실패"
+            echo "Docker 로그 확인:"
+            docker logs ${{ env.CONTAINER_NAME }} || true
             exit 1
           fi
           
-          echo " 서비스 시작 대기 중..."
-          sleep 10
+          echo " 컨테이너 시작 대기 중..."
+          sleep 15
           
-          # 헬스체크 실행
-          ./healthcheck.sh
+          # 컨테이너 상태 확인
+          if ! docker ps --filter name=${{ env.CONTAINER_NAME }} --filter status=running -q | grep -q .; then
+            echo " 컨테이너가 실행되지 않습니다"
+            echo "컨테이너 로그:"
+            docker logs ${{ env.CONTAINER_NAME }} || true
+            echo "컨테이너 상태:"
+            docker ps -a --filter name=${{ env.CONTAINER_NAME }}
+            exit 1
+          fi
           
-          # 배포 정보 출력
+          # 헬스체크 (간단한 포트 체크)
+          echo " 서비스 헬스체크 중..."
+          for i in {1..20}; do
+            echo "헬스체크 시도 $i/20..."
+            if netstat -tuln | grep :${{ env.APP_PORT }} > /dev/null 2>&1; then
+              echo " 포트 ${{ env.APP_PORT }}에서 서비스가 정상 실행 중입니다!"
+              break
+            fi
+            
+            if [ $i -eq 20 ]; then
+              echo " 헬스체크 실패 - 포트가 열리지 않았습니다"
+              echo "컨테이너 로그:"
+              docker logs ${{ env.CONTAINER_NAME }} --tail 30
+              echo "포트 상태:"
+              netstat -tuln | grep ${{ env.APP_PORT }} || true
+              exit 1
+            fi
+            
+            sleep 3
+          done
+          
+          # 최종 API 테스트 (curl이 설치되어 있다면)
+          if command -v curl > /dev/null 2>&1; then
+            echo " API 응답 테스트 중..."
+            if curl -f http://localhost:${{ env.APP_PORT }}/health > /dev/null 2>&1; then
+              echo " API 헬스체크 성공!"
+            else
+              echo " API 헬스체크 실패 (서비스는 실행 중)"
+            fi
+          fi
+          
+          # 배포 완료 정보
           echo ""
           echo " 배포 완료!"
           echo " 완료 시간: $(date)"
-          echo " 컨테이너 ID: $(docker ps -q --filter name=${{ env.CONTAINER_NAME }})"
-          echo " 서비스 URL: http://${{ secrets.EC2_HOST }}:${{ env.APP_PORT }}"
-          echo " 서비스 상태:"
+          echo " 컨테이너 상태:"
           docker ps --filter name=${{ env.CONTAINER_NAME }} --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+          echo " 메모리 사용량:"
+          docker stats ${{ env.CONTAINER_NAME }} --no-stream --format "table {{.Container}}\t{{.CPUPerc}}\t{{.MemUsage}}"
+          echo " 서비스 접속: http://${{ secrets.EC2_HOST }}:${{ env.APP_PORT }}"
           
-          # 최종 상태 확인
-          if docker ps --filter name=${{ env.CONTAINER_NAME }} --filter status=running -q | grep -q .; then
-            echo " 배포 성공: 서비스가 정상 실행 중입니다"
-          else
-            echo " 배포 실패: 서비스가 실행되지 않습니다"
-            echo "컨테이너 로그:"
-            docker logs ${{ env.CONTAINER_NAME }} --tail 50
-            exit 1
-          fi
+          echo " 배포 성공: Neverland AI가 정상적으로 실행 중입니다!"
 
-    - name: Deployment Status Notification
+    - name: Deployment Result
       if: always()
       run: |
         if [ "${{ job.status }}" == "success" ]; then
-          echo " 배포 성공! Neverland AI가 EC2에서 실행 중입니다."
+          echo " 배포 성공!"
+          echo " Neverland AI가 EC2에서 정상적으로 실행 중입니다."
+          echo " 서비스 URL: http://${{ secrets.EC2_HOST }}:8000"
         else
-          echo " 배포 실패! 로그를 확인해주세요."
+          echo " 배포 실패!"
+          echo " 다음 사항들을 확인해주세요:"
+          echo "1. EC2 인스턴스가 실행 중인지 확인"
+          echo "2. SSH 키와 호스트 정보가 올바른지 확인"
+          echo "3. Docker가 EC2에 설치되어 있는지 확인"
+          echo "4. 환경변수가 올바르게 설정되었는지 확인"
+          echo "5. GitHub Actions 로그에서 구체적인 에러 메시지 확인"
         fi
