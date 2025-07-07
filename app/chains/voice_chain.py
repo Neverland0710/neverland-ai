@@ -9,8 +9,7 @@ from langchain.schema.runnable import Runnable, RunnablePassthrough, RunnableLam
 from langchain.prompts import ChatPromptTemplate
 from langchain_core.chat_history import BaseChatMessageHistory
 from langchain_core.runnables.history import RunnableWithMessageHistory
-from langchain_core.messages import HumanMessage, AIMessage
-from langsmith import traceable
+from langchain_core.messages import HumanMessage, AIMessage, BaseMessage
 
 from app.config import settings
 from app.utils.logger import logger
@@ -18,19 +17,15 @@ from app.services.advanced_rag_service import advanced_rag_service
 from app.services.database_service import database_service
 from app.prompts.voice_prompt import VoicePrompts
 
-# LangSmith 안전 임포트
 try:
     from langsmith import traceable
-    # LangSmith 설정
     os.environ["LANGCHAIN_TRACING_V2"] = "true"
     os.environ["LANGCHAIN_API_KEY"] = settings.langsmith_api_key or ""
     os.environ["LANGCHAIN_ENDPOINT"] = settings.langsmith_endpoint
     os.environ["LANGCHAIN_PROJECT"] = settings.langsmith_project
 except ImportError:
-    logger.warning(" LangSmith 패키지가 설치되지 않음 - 추적 기능 비활성화")
     def traceable(name=None):
-        def decorator(func):
-            return func
+        def decorator(func): return func
         return decorator
 
 class VoiceMessageHistory(BaseChatMessageHistory):
@@ -44,7 +39,7 @@ class VoiceMessageHistory(BaseChatMessageHistory):
             return
         try:
             conversations = await database_service.get_recent_conversations(
-                self.session_id, limit=10
+                self.session_id, limit=50
             )
             for conv in conversations:
                 if conv["sender"] == "USER":
@@ -73,7 +68,7 @@ class VoiceResponseParser:
         elif not isinstance(text, str):
             text = str(text)
 
-        logger.debug(f"🎤 음성 GPT 원본 응답: {text}")
+        logger.debug(f" 음성 GPT 원본 응답: {text}")
         response, analysis, risk = "", "", "LOW"
 
         if "|" in text:
@@ -95,19 +90,13 @@ class VoiceResponseParser:
                     risk = line.split("감정 위험도:", 1)[1].strip().upper()
 
         if not response:
-            logger.warning(" 음성 응답 파싱 실패 - 기본 메시지로 대체")
             response = "어... 잠깐만, 뭐라고 했지? 다시 한 번 말해줄래?"
 
         if len(response) > 150:
             response = response[:147] + "..."
 
-        replacements = {
-            "ㅋㅋ": "",
-            "ㅎㅎ": "",
-            "ㅠㅠ": "",
-        }
-        for bad, good in replacements.items():
-            response = response.replace(bad, good)
+        for bad in ["ㅋㅋ", "ㅎㅎ", "ㅠㅠ", "~", "."]:
+            response = response.replace(bad, "")
 
         return {
             "output": {
@@ -120,7 +109,7 @@ class VoiceResponseParser:
 class VoiceChain:
     def __init__(self):
         self.llm = ChatOpenAI(
-            model="gpt-4o",
+            model="gpt-4o-mini",
             temperature=0.2,
             openai_api_key=settings.openai_api_key
         )
@@ -137,7 +126,6 @@ class VoiceChain:
         prompt_template = ChatPromptTemplate.from_messages([
             ("system", VoicePrompts.VOICE_RESPONSE_GENERATION)
         ])
-
         chain = (
             RunnablePassthrough.assign(
                 memories=RunnableLambda(self._search_voice_memories),
@@ -163,7 +151,6 @@ class VoiceChain:
             | self.llm
             | VoiceResponseParser()
         )
-
         return chain
 
     def _get_voice_session_history(self, session_id: str) -> VoiceMessageHistory:
@@ -171,42 +158,28 @@ class VoiceChain:
             self.voice_session_histories[session_id] = VoiceMessageHistory(session_id)
         return self.voice_session_histories[session_id]
 
-    def _get_recent_voice_messages(self, history: VoiceMessageHistory, limit: int = 5) -> str:
+    def _get_recent_voice_messages(self, history: VoiceMessageHistory, limit: int = 10) -> str:
         messages = history.messages[-limit:] if history else []
-        text = []
-        for m in messages:
-            if isinstance(m, HumanMessage):
-                text.append(f"👤 {m.content}")
-            elif isinstance(m, AIMessage):
-                text.append(f" {m.content}")
-        return "\n".join(text) if text else "(대화 기록 없음)"
+        return "\n".join([
+            f"👤 {m.content}" if isinstance(m, HumanMessage) else f"🤖 {m.content}"
+            for m in messages
+        ]) if messages else "(대화 기록 없음)"
 
     def _extract_date_text(self, memories: List[Dict]) -> str:
-        if not memories:
-            return "예전 어느 날"
-        return memories[0].get("date_text", "한참 전")
+        return memories[0].get("date_text", "한참 전") if memories else "예전 어느 날"
 
     def _get_last_voice_analysis(self, session_id: str) -> str:
         history = self._get_voice_session_history(session_id)
-        if not history or not history.messages:
-            return ""
         for msg in reversed(history.messages):
-            if isinstance(msg, AIMessage) and isinstance(msg.content, str) and "|" in msg.content:
+            if isinstance(msg, AIMessage) and "|" in msg.content:
                 return msg.content.split("|")[-1].strip()
         return ""
 
     @traceable(name="generate_voice_response")
-    async def generate_voice_response(
-        self, 
-        user_speech_text: str, 
-        user_id: str, 
-        authKeyId: str,
-        voice_emotion: str = "neutral"
-    ) -> Dict:
+    async def generate_voice_response(self, user_speech_text: str, user_id: str, authKeyId: str, voice_emotion: str = "neutral") -> Dict:
         try:
             session_history = self._get_voice_session_history(authKeyId)
-            if isinstance(session_history, VoiceMessageHistory):
-                await session_history._load_voice_messages()
+            await session_history._load_voice_messages()
 
             input_data = {
                 "input": user_speech_text,
@@ -230,25 +203,23 @@ class VoiceChain:
 
             raw_memories = await self._search_voice_memories(input_data)
 
-            used_memories = [
-                {
-                    "collection": m["collection"],
-                    "content": m["content"],
-                    "score": round(m.get("score", 0.0), 4),
-                    "date_text": m.get("date_text"),
-                    "emotion_tone": m["metadata"].get("emotion_tone"),
-                    "tags": m["metadata"].get("tags"),
-                    "relevance_score": m.get("relevance_score")
-                }
-                for m in raw_memories
-            ]
-
             return {
                 "status": "success",
                 "voice_response": result["response"],
                 "voice_analysis": result["voice_analysis"],
                 "emotion_risk": result["emotion_risk"],
-                "used_memories": used_memories,
+                "used_memories": [
+                    {
+                        "collection": m["collection"],
+                        "content": m["content"],
+                        "score": round(m.get("score", 0.0), 4),
+                        "date_text": m.get("date_text"),
+                        "emotion_tone": m["metadata"].get("emotion_tone"),
+                        "tags": m["metadata"].get("tags"),
+                        "relevance_score": m.get("relevance_score")
+                    }
+                    for m in raw_memories
+                ],
                 "response_length": len(result["response"]),
                 "timestamp": datetime.now().isoformat()
             }
@@ -262,91 +233,59 @@ class VoiceChain:
             }
 
     async def _search_voice_memories(self, data: Dict) -> List[Dict]:
+        query = data["user_input"].strip()
+        history = self._get_voice_session_history(data["authKeyId"])
+
+        if self._should_skip_memory_search_by_content(query, history.messages):
+            logger.info(" 유사 대화 감지 - 메모리 검색 생략")
+            return []
+
         try:
-            query = data["user_input"].strip()
-            if len(query) <= 2:
-                logger.info(f" 짧은 검색어 감지: '{query}' - 빠른 검색 모드")
-                if len(query) == 1:
-                    logger.info(" 한 글자 검색어는 검색 생략")
-                    return []
-                try:
-                    result = await asyncio.wait_for(
-                        advanced_rag_service.search_memories(
-                            query=query,
-                            authKeyId=data["authKeyId"]
-                        ),
-                        timeout=5.0
-                    )
-                    return result[:3]
-                except asyncio.TimeoutError:
-                    logger.warning(f" 짧은 검색어 '{query}' 타임아웃 - 검색 생략")
-                    return []
-
-            logger.info(f" 일반 검색: '{query}'")
-
-            try:
-                result = await asyncio.wait_for(
-                    advanced_rag_service.search_memories(
-                        query=query,
-                        authKeyId=data["authKeyId"]
-                    ),
-                    timeout=15.0
-                )
-                return result[:5]
-            except asyncio.TimeoutError:
-                logger.warning(f" 검색어 '{query}' 타임아웃 - 빈 결과 반환")
-                return []
-
+            timeout = 5.0 if len(query) <= 2 else 15.0
+            result = await asyncio.wait_for(
+                advanced_rag_service.search_memories(
+                    query=query,
+                    authKeyId=data["authKeyId"]
+                ),
+                timeout=timeout
+            )
+            return result[:3] if timeout == 5.0 else result[:5]
+        except asyncio.TimeoutError:
+            logger.warning(f" 검색어 '{query}' 타임아웃 - 빈 결과 반환")
+            return []
         except Exception as e:
             logger.error(f" 메모리 검색 실패: {e}")
             return []
 
+    def _should_skip_memory_search_by_content(self, query: str, messages: List[BaseMessage]) -> bool:
+        normalized = query.lower()
+        skip_phrases = ["뭐라고", "다시 말해줘", "방금 뭐라고"]
+        if any(phrase in normalized for phrase in skip_phrases):
+            return True
+        if len(query.strip()) <= 2:
+            return True
+        if messages and isinstance(messages[-1], HumanMessage):
+            if messages[-1].content.strip() == query.strip():
+                return True
+        return False
+
     async def _get_deceased_info(self, data: Dict) -> Dict:
-        authKeyId = data["authKeyId"]
-        logger.info(f" [음성] 고인 정보 조회 시작: authKeyId='{authKeyId}'")
-        
-        result = await database_service.get_deceased_by_auth_key(authKeyId)
-        
-        logger.info(f" [음성] 고인 정보 조회 결과: {result}")
-        logger.info(f" [음성] 결과 키들: {list(result.keys()) if result else 'None/Empty'}")
-        
-        if not result:
-            logger.error(f" [음성] 고인 정보 없음: authKeyId='{authKeyId}'")
-        elif "name" not in result:
-            logger.error(f" [음성] 'name' 키 누락: {result}")
-        
-        return result
+        return await database_service.get_deceased_by_auth_key(data["authKeyId"])
 
     def _format_voice_memories(self, data: Dict) -> str:
         memories = data.get("memories", [])
         if not memories:
             return ""
         memory_texts = []
-        for i, m in enumerate(memories[:2], 1):
-            date_text = m.get('date_text', '언젠가')
-            content = m['content']
-            if len(content) > 50:
-                content = content[:47] + "..."
-            memory_texts.append(f"{date_text}에 {content}")
+        for m in memories[:2]:
+            content = m['content'][:47] + "..." if len(m['content']) > 50 else m['content']
+            memory_texts.append(f"{m.get('date_text', '언젠가')}에 {content}")
         return "🎤 관련 기억:\n" + "\n".join(memory_texts)
 
-    async def _save_voice_conversation(
-        self, 
-        authKeyId: str, 
-        user_speech: str, 
-        ai_response: str
-    ):
+    async def _save_voice_conversation(self, authKeyId: str, user_speech: str, ai_response: str):
         try:
-            await database_service.save_conversation(
-                authKeyId=authKeyId,
-                sender="USER",
-                message=user_speech
-            )
-            await database_service.save_conversation(
-                authKeyId=authKeyId,
-                sender="CHATBOT",
-                message=ai_response
-            )
+            await database_service.save_conversation(authKeyId=authKeyId, sender="USER", message=user_speech)
+            await database_service.save_conversation(authKeyId=authKeyId, sender="CHATBOT", message=ai_response)
         except Exception as e:
             logger.error(f" 대화 저장 실패: {e}")
 

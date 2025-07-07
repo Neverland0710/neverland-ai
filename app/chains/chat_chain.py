@@ -69,7 +69,7 @@ class SplitResponseParser:
         elif not isinstance(text, str):
             text = str(text)
 
-        logger.debug(f" GPT 원본 응답: {text}")
+        logger.debug(f"🔎 GPT 원본 응답: {text}")
         response, analysis, risk = "", "", "LOW"
 
         if "|" in text:
@@ -79,7 +79,7 @@ class SplitResponseParser:
                 analysis = parts[1].strip().lstrip("분위기 분석 요약:").strip()
                 risk = parts[2].strip().replace("위험도:", "").strip().upper()
             except Exception as e:
-                logger.warning(f" '|' 파싱 실패: {e}")
+                logger.warning(f"⚠️ '|' 파싱 실패: {e}")
         else:
             lines = text.strip().splitlines()
             for line in lines:
@@ -91,7 +91,7 @@ class SplitResponseParser:
                     risk = line.split("위험도:", 1)[1].strip().upper()
 
         if not response:
-            logger.warning(" 응답 파싱 실패 - 기본 메시지로 대체")
+            logger.warning("⚠️ 응답 파싱 실패 - 기본 메시지로 대체")
             response = "미안해, 지금은 잘 대답이 안 돼. 다시 한 번 이야기해줄래?"
 
         if len(response) > self.MAX_RESPONSE_LENGTH:
@@ -120,10 +120,6 @@ class ChatChain:
             history_messages_key="chat_history",
         )
         self.session_histories = {}
-        
-        # 🚀 최적화: 중복 검색 방지를 위한 캐시
-        self._recent_searches = {}  # session_id -> (query, timestamp, results)
-        self.SEARCH_CACHE_DURATION = 30  # 30초
 
     def _build_base_chain(self) -> Runnable:
         prompt_template = ChatPromptTemplate.from_messages([
@@ -132,7 +128,7 @@ class ChatChain:
 
         chain = (
             RunnablePassthrough.assign(
-                memories=RunnableLambda(self._smart_search_memories),  #  스마트 검색으로 변경
+                memories=RunnableLambda(self._search_memories),
                 deceased_info=RunnableLambda(self._get_deceased_info)
             )
             | RunnablePassthrough.assign(
@@ -145,9 +141,7 @@ class ChatChain:
                 age=lambda x: x["deceased_info"]["age"],
                 user_name=lambda x: x["deceased_info"]["user_name"],
                 relation_to_user=lambda x: x["deceased_info"]["relation_to_user"],
-                conversation_history=lambda x: self._get_recent_text_messages(
-                    self._get_session_history(x["authKeyId"])
-                ),
+                conversation_history=lambda x: self._get_recent_text_messages(self._get_session_history(x["authKeyId"])),
                 date_text=lambda x: self._extract_date_text(x.get("memories", [])),
                 emotion_tone=lambda x: x.get("previous_analysis", "")
             )
@@ -188,96 +182,16 @@ class ChatChain:
                 return parsed["output"].get("analysis", "")
         return ""
 
-    def _is_search_needed(self, user_input: str, session_id: str) -> bool:
-        """ 스마트 검색 필요성 판단"""
-        query = user_input.strip().lower()
-        
-        # 1. 너무 짧은 검색어
-        if len(query) <= 2:
-            logger.info(f"💬 검색 생략: 너무 짧은 검색어 '{query}'")
-            return False
-            
-        # 2. 일반적인 인사말/감사 표현
-        greeting_keywords = [
-            "안녕", "고마워", "감사", "사랑해", "보고싶어", "잘자", "안녕히",
-            "괜찮아", "좋아", "싫어", "힘들어", "슬퍼", "기뻐"
-        ]
-        if any(keyword in query for keyword in greeting_keywords):
-            logger.info(f" 검색 생략: 일반적인 감정 표현 '{query}'")
-            return False
-            
-        # 3. 캐시된 검색 결과 확인
-        now = datetime.now().timestamp()
-        if session_id in self._recent_searches:
-            cached_query, cached_time, cached_results = self._recent_searches[session_id]
-            if (now - cached_time) < self.SEARCH_CACHE_DURATION:
-                # 유사한 검색어인지 확인
-                similarity = self._calculate_similarity(query, cached_query)
-                if similarity > 0.7:
-                    logger.info(f" 검색 생략: 캐시된 결과 재사용 (유사도: {similarity:.2f})")
-                    return False
-                    
-        return True
-
-    def _calculate_similarity(self, query1: str, query2: str) -> float:
-        """간단한 문자열 유사도 계산"""
-        words1 = set(query1.split())
-        words2 = set(query2.split())
-        intersection = words1 & words2
-        union = words1 | words2
-        return len(intersection) / len(union) if union else 0
-
-    async def _smart_search_memories(self, data: Dict) -> List[Dict]:
-        """ 스마트 메모리 검색 - 중복 제거 및 캐싱"""
-        try:
-            query = data["user_input"].strip()
-            session_id = data["authKeyId"]
-            
-            # 검색 필요성 판단
-            if not self._is_search_needed(query, session_id):
-                return []
-                
-            # 캐시 확인
-            now = datetime.now().timestamp()
-            if session_id in self._recent_searches:
-                cached_query, cached_time, cached_results = self._recent_searches[session_id]
-                if (now - cached_time) < self.SEARCH_CACHE_DURATION:
-                    similarity = self._calculate_similarity(query.lower(), cached_query)
-                    if similarity > 0.7:
-                        logger.info(f" 캐시된 검색 결과 재사용: '{query}' ≈ '{cached_query}'")
-                        return cached_results
-
-            logger.info(f" 새로운 메모리 검색 실행: '{query}'")
-
-            # 실제 검색 수행
-            try:
-                results = await asyncio.wait_for(
-                    advanced_rag_service.search_memories(
-                        query=query,
-                        authKeyId=session_id
-                    ),
-                    timeout=10.0  # 타임아웃 단축
-                )
-                
-                # 결과 캐싱
-                self._recent_searches[session_id] = (query.lower(), now, results)
-                
-                # 캐시 정리 (최대 100개 세션만 유지)
-                if len(self._recent_searches) > 100:
-                    oldest_session = min(self._recent_searches.keys(), 
-                                       key=lambda k: self._recent_searches[k][1])
-                    del self._recent_searches[oldest_session]
-                
-                logger.info(f" 검색 완료: {len(results)}개 결과")
-                return results
-                
-            except asyncio.TimeoutError:
-                logger.warning(f" 검색 타임아웃: '{query}' - 빈 결과 반환")
-                return []
-
-        except Exception as e:
-            logger.error(f" 메모리 검색 실패: {e}")
-            return []
+    def _should_skip_memory_search_by_content(self, user_input: str, history: DatabaseChatMessageHistory) -> bool:
+        recent_ai_msgs = [m.content.lower() for m in reversed(history.messages[-50:]) if isinstance(m, AIMessage)]
+        user_keywords = set(user_input.lower().split())
+        for msg in recent_ai_msgs:
+            msg_words = set(msg.split())
+            overlap = user_keywords & msg_words
+            if len(overlap) / max(len(user_keywords), 1) >= 0.6:
+                logger.info(" 최근 응답과 유사한 내용 발견 → 기억 검색 생략")
+                return True
+        return False
 
     @traceable(name="generate_response")
     async def generate_response(self, user_input: str, user_id: str, authKeyId: str) -> Dict:
@@ -286,15 +200,22 @@ class ChatChain:
             if isinstance(session_history, DatabaseChatMessageHistory):
                 await session_history._load_messages()
 
+            skip_rag = self._should_skip_memory_search_by_content(user_input, session_history)
+
             input_data = {
                 "input": user_input,
                 "user_input": user_input,
                 "user_id": user_id,
                 "authKeyId": authKeyId,
                 "previous_analysis": self._get_last_analysis(authKeyId)
-            }
+            }   
 
-            logger.info(f" 채팅 응답 생성 시작: '{user_input[:30]}...'")
+            if not skip_rag:
+                input_data["memories"] = await self._search_memories(input_data)
+            else:
+                input_data["memories"] = []
+
+            logger.info(f" 입력: {user_input} | RAG 생략: {skip_rag} | 기억 수: {len(input_data['memories'])}")
 
             ai_output = await self.chain_with_history.ainvoke(
                 input_data,
@@ -305,7 +226,6 @@ class ChatChain:
 
             await self._save_conversation(authKeyId, user_input, result["response"])
 
-            # 사용된 메모리 정보 정리
             raw_memories = input_data.get("memories", [])
             used_memories = [
                 {
@@ -320,14 +240,11 @@ class ChatChain:
                 for m in raw_memories
             ]
 
-            logger.info(f" 응답 생성 완료: {len(result['response'])}자, 메모리 {len(used_memories)}개 사용")
-
             return {
                 "status": "success",
                 "response": result["response"],
                 "emotion_analysis": result["analysis"],
                 "used_memories": used_memories,
-                "search_cached": len(raw_memories) == 0,  # 검색이 캐싱되었는지 표시
                 "timestamp": datetime.now().isoformat()
             }
 
@@ -335,9 +252,50 @@ class ChatChain:
             logger.error(f" 대화 생성 실패: {e}")
             return {
                 "status": "error",
-                "response": "죄송해요, 지금은 생각이 잘 정리되지 않네요. 다시 한 번 말해줄래요?",
+                "response": "지금은 생각이 잘 정리되지 않네요. 다시 한 번 말해줄래요?",
                 "error": str(e)
             }
+
+    async def _search_memories(self, data: Dict) -> List[Dict]:
+        try:
+            query = data["user_input"].strip()
+
+            if len(query) <= 2:
+                logger.info(f" 짧은 검색어 감지: '{query}' - 빠른 검색 모드")
+                if len(query) == 1:
+                    logger.info(" 한 글자 검색어는 검색 생략")
+                    return []
+                try:
+                    result = await asyncio.wait_for(
+                        advanced_rag_service.search_memories(
+                            query=query,
+                            authKeyId=data["authKeyId"]
+                        ),
+                        timeout=5.0
+                    )
+                    return result[:3]
+                except asyncio.TimeoutError:
+                    logger.warning(f" 짧은 검색어 '{query}' 타임아웃 - 검색 생략")
+                    return []
+
+            logger.info(f" 일반 검색: '{query}'")
+
+            try:
+                result = await asyncio.wait_for(
+                    advanced_rag_service.search_memories(
+                        query=query,
+                        authKeyId=data["authKeyId"]
+                    ),
+                    timeout=15.0
+                )
+                return result
+            except asyncio.TimeoutError:
+                logger.warning(f" 검색어 '{query}' 타임아웃 - 빈 결과 반환")
+                return []
+
+        except Exception as e:
+            logger.error(f" 메모리 검색 실패: {e}")
+            return []
 
     async def _get_deceased_info(self, data: Dict) -> Dict:
         return await database_service.get_deceased_by_auth_key(data["authKeyId"])
