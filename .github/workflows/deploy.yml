@@ -1,4 +1,4 @@
-name: Deploy Neverland AI (Resource Optimized)
+name: Deploy Neverland AI (Fixed)
 
 on:
   push:
@@ -26,7 +26,7 @@ jobs:
             echo "CPU: $(top -bn1 | grep "Cpu(s)" | awk '{print $2}')"
             echo "디스크: $(df -h / | tail -1 | awk '{print $5}')"
             
-            echo " Docker 시스템 정리 (메모리 확보)"
+            echo "🧹 Docker 시스템 정리 (메모리 확보)"
             docker system prune -af --volumes || true
             docker stop neverland-ai || true
             docker rm neverland-ai || true
@@ -53,9 +53,8 @@ jobs:
             LANGSMITH_PROJECT=${{ secrets.LANGSMITH_PROJECT }}
             EOF
             
-            echo " 제한된 리소스로 빌드"
-            # CPU 사용량 제한하여 빌드
-            docker build -t neverland-ai . --memory=512m --cpu-quota=50000
+            echo " Docker 이미지 빌드 (캐시 활용)"
+            docker build -t neverland-ai .
             
             echo " 리소스 제한 컨테이너 실행"
             docker run -d \
@@ -66,8 +65,6 @@ jobs:
               --memory="800m" \
               --memory-swap="1g" \
               --cpus="0.7" \
-              --cpu-quota=70000 \
-              --cpu-period=100000 \
               --oom-kill-disable=false \
               neverland-ai
             
