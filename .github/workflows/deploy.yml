@@ -17,7 +17,7 @@ jobs:
           key: ${{ secrets.EC2_KEY }}
           port: 22
           timeout: 60s
-          command_timeout: 15m
+          command_timeout: 10m  # 시간 단축
           script: |
             set -e
             
@@ -43,8 +43,6 @@ jobs:
             fi
             
             echo "현재 작업 디렉토리: $(pwd)"
-            echo "프로젝트 파일 확인:"
-            ls -la
             
             echo " .env 파일 생성"
             cat > .env << 'EOF'
@@ -65,19 +63,13 @@ jobs:
             LANGSMITH_PROJECT=${{ secrets.LANGSMITH_PROJECT }}
             EOF
             
-            echo "🧹 기존 컨테이너 정리"
-            if docker ps -q -f name=neverland-ai >/dev/null 2>&1; then
-              echo "실행 중인 컨테이너 중지"
-              docker stop neverland-ai
-            fi
+            echo " 기존 컨테이너 정리"
+            docker stop neverland-ai || true
+            docker rm neverland-ai || true
             
-            if docker ps -aq -f name=neverland-ai >/dev/null 2>&1; then
-              echo "기존 컨테이너 삭제"
-              docker rm neverland-ai
-            fi
-            
-            echo " 최신 이미지 빌드"
-            docker build -t neverland-ai . --no-cache
+            echo " 최신 이미지 빌드 (캐시 활용)"
+            # --no-cache 제거로 빌드 시간 대폭 단축
+            docker build -t neverland-ai .
             
             echo " 컨테이너 실행"
             docker run -d \
@@ -87,18 +79,16 @@ jobs:
               --name neverland-ai \
               neverland-ai
             
-            echo " 컨테이너 시작 확인 (30초 대기)"
-            sleep 30
+            echo " 컨테이너 시작 확인 (15초 대기)"
+            sleep 15
             
             echo " 배포 상태 확인"
             if docker ps | grep neverland-ai | grep -q "Up"; then
               echo " 배포 성공!"
               echo "컨테이너 상태:"
               docker ps | grep neverland-ai
-              echo "최근 로그:"
-              docker logs --tail=10 neverland-ai
             else
-              echo " 배포 실패, 전체 로그 확인:"
+              echo " 배포 실패, 로그 확인:"
               docker logs neverland-ai
               exit 1
             fi
