@@ -9,12 +9,6 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v3
-
-      - name: Build Docker Image
-        run: docker build -t neverland-ai .
-
       - name: SSH & Deploy to EC2
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -22,9 +16,21 @@ jobs:
           username: ubuntu
           key: ${{ secrets.EC2_KEY }}
           port: 22
+          timeout: 30s
+          command_timeout: 15m
           script: |
-            echo "📁 프로젝트 디렉토리 이동 or 클론"
-            cd ~/neverland-ai || git clone https://github.com/Neverland0710/neverland-ai.git && cd neverland-ai
+            echo "📁 프로젝트 디렉토리 설정"
+            
+            # 안전한 디렉토리 처리
+            if [ -d "~/neverland-ai" ]; then
+              echo "기존 디렉토리로 이동 및 업데이트"
+              cd ~/neverland-ai
+              git pull origin main
+            else
+              echo "새 프로젝트 클론"
+              git clone https://github.com/Neverland0710/neverland-ai.git ~/neverland-ai
+              cd ~/neverland-ai
+            fi
 
             echo "🔐 .env 파일 생성"
             echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" > .env
@@ -43,11 +49,14 @@ jobs:
             echo "LANGSMITH_ENDPOINT=${{ secrets.LANGSMITH_ENDPOINT }}" >> .env
             echo "LANGSMITH_PROJECT=${{ secrets.LANGSMITH_PROJECT }}" >> .env
 
-            echo "🧹 기존 컨테이너 종료 및 삭제"
-            docker rm -f neverland-ai || true
+            echo "🧹 기존 컨테이너 정리"
+            docker stop neverland-ai || true
+            docker rm neverland-ai || true
 
-            echo "🛠️ 최신 이미지 빌드 및 실행"
+            echo "🛠️ 최신 이미지 빌드"
             docker build -t neverland-ai .
+            
+            echo "🚀 컨테이너 실행"
             docker run -d \
               -p 8000:8000 \
               --env-file .env \
