@@ -1,31 +1,27 @@
 # app/schemas/search_schemas.py
 """
-지능형 검색 관련 스키마
+기억 검색 관련 스키마
 """
 
 from pydantic import BaseModel
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Any
 from .commons_schemas import BaseResponse
 
-
 class SearchRequest(BaseModel):
-    user_id: str
     query: str
-    context: Optional[str] = ""
-    emotion_filter: Optional[List[str]] = None
-    date_range: Optional[Dict[str, str]] = None
+    authKeyId: str  
     limit: Optional[int] = 5
 
-
-class SearchMemory(BaseModel):
-    content: str
+class MemoryResult(BaseModel):
     collection: str
+    content: str
     score: float
-    date: Optional[str] = None
-    item_category: Optional[str] = None
-
+    date_text: Optional[str] = None
+    emotion_tone: Optional[str] = None
+    tags: Optional[List[str]] = None
+    relevance_score: Optional[float] = None
 
 class SearchResponse(BaseResponse):
-    memories: List[SearchMemory]
+    memories: List[MemoryResult]
+    search_strategy: str
     total_found: int
-    search_strategy: Optional[str] = None

@@ -18,15 +18,25 @@ async def search_memories(request: SearchRequest):
     try:
         logger.info(f" 기억 검색 요청: query='{request.query}'")
 
-        # memory_type 제거 → 모든 컬렉션에서 검색
+        # user_id를 authKeyId로 변환하거나, 스키마에 authKeyId가 있다면 직접 사용
+        auth_key_id = getattr(request, 'authKeyId', getattr(request, 'user_id', None))
+        
+        if not auth_key_id:
+            raise HTTPException(status_code=400, detail="authKeyId 또는 user_id가 필요합니다")
+
+        logger.debug(f" 사용할 authKeyId: {auth_key_id}")
+
+        # authKeyId 파라미터로 수정
         memories = await advanced_rag_service.search_memories(
             query=request.query,
-            user_id=request.user_id
+            authKeyId=auth_key_id
         )
+
+        logger.info(f" 검색 완료: {len(memories)}개 기억 발견")
 
         return SearchResponse(
             memories=memories,
-            search_strategy="통합 컬렉션 검색",
+            search_strategy="통합 컬렉션 검색 (authKeyId 기반)",
             total_found=len(memories)
         )
 
