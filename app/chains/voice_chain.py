@@ -17,7 +17,7 @@ from app.utils.logger import logger
 from app.services.advanced_rag_service import advanced_rag_service
 from app.services.database_service import database_service
 from app.prompts.voice_prompt import VoicePrompts
-
+from app.models.conversation import TextConversation
 # LangSmith 설정
 try:
     from langsmith import traceable
@@ -522,12 +522,12 @@ class VoiceChain:
     async def _save_voice_conversation(self, authKeyId: str, user_speech: str, ai_response: str):
         """음성 대화 저장 (비동기)"""
         try:
-            await database_service.save_conversation(
+            await TextConversation.save_message(
                 authKeyId=authKeyId, 
                 sender="USER", 
                 message=user_speech
             )
-            await database_service.save_conversation(
+            await TextConversation.save_message(
                 authKeyId=authKeyId, 
                 sender="CHATBOT", 
                 message=ai_response

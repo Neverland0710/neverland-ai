@@ -16,7 +16,7 @@ from app.utils.logger import logger
 from app.services.advanced_rag_service import advanced_rag_service
 from app.services.database_service import database_service
 from app.prompts.chat_prompt import ChatPrompts
-
+from app.models.conversation import TextConversation
 # LangSmith 설정
 try:
     from langsmith import traceable
@@ -157,10 +157,18 @@ class ChatChain:
             self.session_histories[session_id] = DatabaseChatMessageHistory(session_id)
         return self.session_histories[session_id]
 
+    from app.models.conversation import TextConversation  # 상단에 import 필수
+
     async def generate_response(self, user_input: str, user_id: str, authKeyId: str) -> Dict:
         try:
             session_history = self._get_session_history(authKeyId)
             await session_history._load_messages()
+
+            await TextConversation.save_message(
+                authKeyId=authKeyId,
+                sender="USER",
+                message=user_input
+            )
 
             input_data = {
                 "input": user_input,
@@ -180,13 +188,18 @@ class ChatChain:
             )
 
             logger.debug(f"GPT 응답 원문: {ai_output}")
-
             parsed = self.response_parser(ai_output)
             logger.debug(f"파싱된 응답: {parsed.content}")
 
             response = self.response_parser._extract_response(parsed.content)
             analysis = self.response_parser._extract_analysis(parsed.content)
             risk = self.response_parser._extract_risk(parsed.content)
+
+            await TextConversation.save_message(
+                authKeyId=authKeyId,
+                sender="CHATBOT",
+                message=response
+            )
 
             if not response:
                 logger.warning("GPT 응답이 비어있음 또는 파싱 실패 → fallback 응답 반환")
@@ -221,6 +234,7 @@ class ChatChain:
                 "error": str(e),
                 "fallback": True
             }
+
 
     async def _search_memories(self, data: Dict) -> List[Dict]:
         try:
