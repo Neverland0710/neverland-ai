@@ -4,6 +4,7 @@ from datetime import datetime
 import os
 import asyncio
 import re
+from datetime import datetime, timedelta
 
 from langchain_openai import ChatOpenAI
 from langchain.schema.runnable import Runnable, RunnablePassthrough, RunnableLambda
@@ -522,20 +523,25 @@ class VoiceChain:
     async def _save_voice_conversation(self, authKeyId: str, user_speech: str, ai_response: str):
         """음성 대화 저장 (비동기)"""
         try:
-            now = datetime.now().isoformat()
+            now = datetime.now()
+            user_time = now
+            bot_time = now + timedelta(milliseconds=10)  # 10ms 차이
+
             await database_service.save_conversation(
                 authKeyId=authKeyId,
                 sender="USER",
                 message=user_speech,
-                metadata={"sent_at": now}
+                metadata={"sent_at": user_time.isoformat()}
             )
             await database_service.save_conversation(
                 authKeyId=authKeyId,
                 sender="CHATBOT",
                 message=ai_response,
-                metadata={"sent_at": now}
+                metadata={"sent_at": bot_time.isoformat()}
             )
+
             logger.debug(" 음성 대화 저장 완료")
+
         except Exception as e:
             logger.error(f" 음성 대화 저장 실패: {e}")
 
