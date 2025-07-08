@@ -30,7 +30,7 @@ collections = [
 for name in collections:
     if client.collection_exists(name):
         client.delete_collection(name)
-        print(f"🗑️ Deleted existing: {name}")
+        print(f" Deleted existing: {name}")
 
     client.create_collection(
         collection_name=name,
