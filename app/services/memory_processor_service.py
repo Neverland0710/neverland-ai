@@ -80,8 +80,8 @@ class MemoryProcessorService:
 
         return " ".join(memory_lines), tags
 
+
     async def save_summary_to_qdrant(
-        self,
         authKeyId: str,
         itemType: str,
         memoryText: str,
@@ -91,7 +91,7 @@ class MemoryProcessorService:
         itemId = generate_item_id(itemType)
         createdAt = now_kst().isoformat()
 
-        #  태그 정제
+        # 태그 정제
         clean_tags = []
         if isinstance(tags, dict):
             clean_tags = list(tags.values())
@@ -100,8 +100,8 @@ class MemoryProcessorService:
         elif isinstance(tags, list):
             clean_tags = [str(t).strip() for t in tags if isinstance(t, (str, int))]
 
-        #  page_content에는 태그 넣지 않음
-        #  태그는 벡터화용 텍스트에만 포함시킴
+        # page_content에는 태그 넣지 않음
+        # 태그는 벡터화용 텍스트에만 포함시킴
         vector_text = f"[태그: {', '.join(clean_tags)}]\n{memoryText}" if clean_tags else memoryText
 
         metadata = {
@@ -119,10 +119,10 @@ class MemoryProcessorService:
         await advanced_rag_service.upsert_document(
             collection_name="memories",
             document={
-                "page_content": memoryText,  
+                "page_content": memoryText,
                 "metadata": metadata
             },
-            vector_override=vector_text 
+            vector_override=vector_text
         )
 
         return itemId
