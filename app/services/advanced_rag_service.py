@@ -94,9 +94,17 @@ class AdvancedRAGService:
             TOP_K = 3
             RELEVANCE_THRESHOLD = 0.3
 
-            def boost_score_with_tags(result, query):
-                tags = result["metadata"].get("tags", [])
-                return result["score"] + 0.05 if any(tag in query for tag in tags) else result["score"]
+            def boost_score_with_tags(result, query: str) -> float:
+                tags = result.get("metadata", {}).get("tags", [])
+                score = result.get("score", 0.0)
+
+                for tag in tags:
+                    if tag in query:
+                        return score + 0.1
+                    if len(tag) >= 2 and tag[:2] in query:
+                        return score + 0.05
+
+                return score
 
             for mem_type, collection in self.collections.items():
                 search_result = self.qdrant_client.search(
@@ -128,8 +136,8 @@ class AdvancedRAGService:
                     logger.info(f"[{r['collection']}] {r['metadata'].get('tags', [])} | {r['score']:.4f} → {r['boosted_score']:.4f}")
                 all_results.extend(top_k)
 
-            logger.info(f" 전체 선택된 결과: {len(all_results)}개")
-            return sorted(all_results, key=lambda x: -x["boosted_score"])[:TOP_K * len(self.collections)]
+            sorted_results = sorted(all_results, key=lambda x: -x["boosted_score"])
+            return sorted_results[:1]  # 최종적으로 가장 높은 1개만 반환
 
         except Exception as e:
             logger.error(f" 기억 검색 실패: {e}")
