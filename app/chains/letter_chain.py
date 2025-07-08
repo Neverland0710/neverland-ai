@@ -33,6 +33,12 @@ class LetterChain:
         tags = [t.strip() for t in tags_str.split(",") if t.strip()]
         return summary, tags
 
+    def _build_vector_text(self, summary: str, tags: List[str]) -> str:
+        """태그를 벡터화 텍스트 앞에 삽입"""
+        if tags:
+            return f"[태그: {', '.join(tags)}]\n{summary}"
+        return summary
+
     async def process_letter(self, letter_id: str, user_id: str, authKeyId: str, letter_text: str) -> LetterProcessInternalResult:
         try:
             start_time = time.time()
@@ -40,14 +46,29 @@ class LetterChain:
             # 1. 고인 정보 조회
             deceased_info = await database_service.get_deceased_by_auth_key(authKeyId)
 
-            # 2. 프롬프트 템플릿 준비
+            # 2. 관련 기억 검색 (RAG)
+            rag_memories = await advanced_rag_service.search_memories(
+                query=letter_text,
+                authKeyId=authKeyId
+            )
+
+            memory_context = ""
+            date_text = ""
+            memory_keywords = ""
+
+            if rag_memories:
+                memory_context = "\n".join([m["content"] for m in rag_memories])
+                date_text = rag_memories[0].get("date_text", "")
+                memory_keywords = ", ".join(rag_memories[0].get("metadata", {}).get("tags", []))
+
+            # 3. 프롬프트 준비
             summary_prompt = PromptTemplate.from_template(LetterPrompts.LETTER_SUMMARY)
             response_prompt = PromptTemplate.from_template(LetterPrompts.LETTER_RESPONSE)
 
             summary_chain = summary_prompt | self.llm | self.output_parser
             response_chain = response_prompt | self.llm | self.output_parser
 
-            # 3. 답장 생성
+            # 4. 답장 생성
             response_input = {
                 "title": "",
                 "content": letter_text,
@@ -56,11 +77,13 @@ class LetterChain:
                 "relation_to_user": deceased_info["relation_to_user"],
                 "personality": deceased_info["personality"],
                 "speaking_style": deceased_info["speaking_style"],
-                "memory_context": "",
+                "memory_context": memory_context,
+                "date_text": date_text,
+                "memory_keywords": memory_keywords or "기억 속 따뜻한 장면"
             }
             response = await response_chain.ainvoke(response_input)
 
-            # 4. 요약 + 태그 생성
+            # 5. 요약 + 태그 생성
             summary_input = {
                 "user_letter": letter_text,
                 "ai_response": response,
@@ -71,9 +94,12 @@ class LetterChain:
             summary_raw = await summary_chain.ainvoke(summary_input)
             summary, tags = self._parse_summary_and_tags(summary_raw)
 
-            # 5. Qdrant 저장
+            #  6. 벡터 텍스트 구성
+            vector_text = self._build_vector_text(summary, tags)
+
+            #  7. Qdrant 저장
             await advanced_rag_service.store_memory(
-                content=summary,
+                content=vector_text,
                 authKeyId=authKeyId,
                 memory_type="letter",
                 item_id=f"letter_{datetime.utcnow().timestamp()}",

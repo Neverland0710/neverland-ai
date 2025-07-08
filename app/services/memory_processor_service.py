@@ -99,6 +99,10 @@ class MemoryProcessorService:
         itemId = generate_item_id(itemType)
         createdAt = now_kst().isoformat()
 
+        #  벡터화될 텍스트 앞에 태그를 포함시킴
+        tag_prefix = f"[태그: {', '.join(tags)}]" if tags else ""
+        vector_text = f"{tag_prefix}\n{memoryText}".strip()
+
         metadata = {
             "authKeyId": authKeyId,
             "itemId": itemId,
@@ -108,13 +112,13 @@ class MemoryProcessorService:
             "date": createdAt[:10],
             "createdAt": createdAt,
             "sourceText": sourceText,
-            "tags": tags
+            "tags": tags 
         }
 
         await advanced_rag_service.upsert_document(
             collection_name="memories",
             document={
-                "page_content": memoryText,
+                "page_content": vector_text,
                 "metadata": metadata
             }
         )
