@@ -24,7 +24,6 @@ class LetterChain:
         self.output_parser = StrOutputParser()
 
     def _parse_summary_and_tags(self, response_text: str) -> Tuple[str, List[str]]:
-        """GPT 응답에서 요약과 태그 추출"""
         summary_match = re.search(r"요약\s*:\s*(.*?)\n", response_text, re.DOTALL)
         tags_match = re.search(r"태그\s*:\s*(.*)", response_text)
 
@@ -34,7 +33,6 @@ class LetterChain:
         return summary, tags
 
     def _build_vector_text(self, summary: str, tags: List[str]) -> str:
-        """태그를 벡터화 텍스트 앞에 삽입"""
         if tags:
             return f"[태그: {', '.join(tags)}]\n{summary}"
         return summary
@@ -43,8 +41,8 @@ class LetterChain:
         try:
             start_time = time.time()
 
-            # 1. 고인 정보 조회
-            deceased_info = await database_service.get_deceased_by_auth_key(authKeyId)
+            # 1. 사용자 + 고인 정보 조회
+            deceased_info = await database_service.get_user_by_auth_key(authKeyId)
 
             # 2. 관련 기억 검색 (RAG)
             rag_memories = await advanced_rag_service.search_memories(
@@ -73,8 +71,8 @@ class LetterChain:
                 "title": "",
                 "content": letter_text,
                 "user_name": deceased_info["user_name"],
-                "deceased_name": deceased_info["name"],
-                "relation_to_user": deceased_info["relation_to_user"],
+                "deceased_name": deceased_info["deceased_name"],
+                "relation_to_user": deceased_info["relation_to_deceased"],
                 "personality": deceased_info["personality"],
                 "speaking_style": deceased_info["speaking_style"],
                 "memory_context": memory_context,
@@ -88,25 +86,31 @@ class LetterChain:
                 "user_letter": letter_text,
                 "ai_response": response,
                 "user_name": deceased_info["user_name"],
-                "deceased_name": deceased_info["name"],
-                "relation_to_user": deceased_info["relation_to_user"]
+                "deceased_name": deceased_info["deceased_name"],
+                "relation_to_user": deceased_info["relation_to_deceased"]
             }
             summary_raw = await summary_chain.ainvoke(summary_input)
             summary, tags = self._parse_summary_and_tags(summary_raw)
-
-            #  6. 벡터 텍스트 구성
             vector_text = self._build_vector_text(summary, tags)
 
-            #  7. Qdrant 저장
-            await advanced_rag_service.store_memory(
-                content=vector_text,
-                authKeyId=authKeyId,
+            # 6. 저장용 ID 생성
+            item_id = f"letter_{datetime.utcnow().timestamp()}"
+
+            # 7. Qdrant 저장 (collection 자동 처리됨)
+            await advanced_rag_service.store_memory_with_metadata(
+                id=item_id,
+                content=summary,  # ✅ 태그 없이 저장
+                page_content=summary,
                 memory_type="letter",
-                item_id=f"letter_{datetime.utcnow().timestamp()}",
+                authKeyId=authKeyId,
                 item_type="letter",
+                itemCategory="letter",
+                memoryType="summary",
                 source="letter",
                 tags=tags,
-                date=datetime.today().strftime("%Y-%m-%d")
+                sourceText=letter_text,
+                date=datetime.today().strftime("%Y-%m-%d"),
+                createdAt=datetime.utcnow().isoformat()
             )
 
             elapsed = round(time.time() - start_time, 2)

@@ -79,7 +79,7 @@ class VoiceResponseParser:
     """음성 응답 전용 파서"""
     
     MAX_RESPONSE_LENGTH = 150  # 음성은 더 짧게
-    METADATA_PREFIXES = ('요약:', '태그:', '분위기:', '위험도:', '분석:')
+    METADATA_PREFIXES = ('요약:', '위험도:', '분석:')
     VOICE_CLEANUP_PATTERNS = ["ㅋㅋ", "ㅎㅎ", "ㅠㅠ", "~", ".", "^^"]
     
     def __call__(self, text: Any) -> Dict[str, Any]:

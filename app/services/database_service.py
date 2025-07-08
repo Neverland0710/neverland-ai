@@ -361,7 +361,7 @@ class DatabaseService:
 
     async def close(self):
         await self.engine.dispose()
-        logger.info("🔌 데이터베이스 연결 종료")
+        logger.info(" 데이터베이스 연결 종료")
 
 # 전역 인스턴스화
 database_service = DatabaseService()

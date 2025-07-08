@@ -91,9 +91,18 @@ class MemoryProcessorService:
         itemId = generate_item_id(itemType)
         createdAt = now_kst().isoformat()
 
-        #  벡터화용 텍스트 (태그 포함)
-        tag_prefix = f"[태그: {', '.join(tags)}]" if tags else ""
-        vector_text = f"{tag_prefix}\n{memoryText}".strip()
+        #  태그 정제
+        clean_tags = []
+        if isinstance(tags, dict):
+            clean_tags = list(tags.values())
+        elif isinstance(tags, str):
+            clean_tags = [t.strip() for t in tags.strip("[]").split(",") if t.strip()]
+        elif isinstance(tags, list):
+            clean_tags = [str(t).strip() for t in tags if isinstance(t, (str, int))]
+
+        #  page_content에는 태그 넣지 않음
+        #  태그는 벡터화용 텍스트에만 포함시킴
+        vector_text = f"[태그: {', '.join(clean_tags)}]\n{memoryText}" if clean_tags else memoryText
 
         metadata = {
             "authKeyId": authKeyId,
@@ -104,7 +113,7 @@ class MemoryProcessorService:
             "date": createdAt[:10],
             "createdAt": createdAt,
             "sourceText": sourceText,
-            "tags": tags
+            "tags": clean_tags
         }
 
         await advanced_rag_service.upsert_document(
@@ -113,7 +122,7 @@ class MemoryProcessorService:
                 "page_content": memoryText,  
                 "metadata": metadata
             },
-            vector_override=vector_text  
+            vector_override=vector_text 
         )
 
         return itemId

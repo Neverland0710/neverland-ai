@@ -2,19 +2,19 @@ from datetime import datetime, date
 from typing import List, Dict
 import os
 import logging
-import asyncio
 
 from langchain_openai import OpenAIEmbeddings
-from langchain_qdrant import Qdrant
+from langchain.vectorstores import Qdrant as LangchainQdrant
 from langchain.schema import Document
 from qdrant_client import QdrantClient
+from qdrant_client.models import SearchParams
 
 from app.config import settings
 from app.utils.logger import logger
 
 logger = logging.getLogger("memorial_chat")
 
-#  LangSmith 추적 연동
+# LangSmith 연동
 os.environ["LANGCHAIN_TRACING_V2"] = "true"
 os.environ["LANGCHAIN_API_KEY"] = settings.langsmith_api_key
 os.environ["LANGCHAIN_PROJECT"] = settings.langsmith_project
@@ -24,7 +24,6 @@ def format_date_relative(memory_date: str) -> str:
         mem_date = datetime.strptime(memory_date, "%Y-%m-%d").date()
         today = date.today()
         delta = (today - mem_date).days
-
         if delta == 0:
             return "오늘 있었던 일"
         elif delta == 1:
@@ -44,146 +43,31 @@ class AdvancedRAGService:
             model="text-embedding-3-small",
             openai_api_key=settings.openai_api_key
         )
-
         self.qdrant_client = QdrantClient(
             url=settings.qdrant_url,
             api_key=settings.qdrant_api_key
         )
-
-        self.daily_conversation_store = Qdrant(
+        self.daily_conversation_store = LangchainQdrant(
             client=self.qdrant_client,
             collection_name=settings.daily_conversation_collection,
             embeddings=self.embeddings
         )
-        self.letter_memory_store = Qdrant(
+        self.letter_memory_store = LangchainQdrant(
             client=self.qdrant_client,
             collection_name=settings.letter_memory_collection,
             embeddings=self.embeddings
         )
-        self.object_memory_store = Qdrant(
+        self.object_memory_store = LangchainQdrant(
             client=self.qdrant_client,
             collection_name=settings.object_memory_collection,
             embeddings=self.embeddings
         )
-
+        self.collections = {
+            "daily": settings.daily_conversation_collection,
+            "letter": settings.letter_memory_collection,
+            "object": settings.object_memory_collection
+        }
         logger.info(" AdvancedRAGService 초기화 완료")
-
-    async def search_memories(self, query: str, authKeyId: str) -> List[Dict]:
-        try:
-            logger.info(f"🔍 RAG 검색 시작: query='{query}', authKeyId='{authKeyId}'")
-            results = []
-
-            letter_task = self.letter_memory_store.asimilarity_search_with_score(query, k=3)
-            object_task = self.object_memory_store.asimilarity_search_with_score(query, k=3)
-            daily_task = self.daily_conversation_store.asimilarity_search_with_score(query, k=3)
-
-            letter_docs, object_docs, daily_docs = await asyncio.gather(
-                letter_task, object_task, daily_task
-            )
-
-            logger.info(f" 검색 결과: letter={len(letter_docs)}, object={len(object_docs)}, daily={len(daily_docs)}")
-
-            for docs, collection in [
-                (letter_docs, "letter"),
-                (object_docs, "object"),
-                (daily_docs, "daily")
-            ]:
-                for doc, score in docs:
-                    meta = doc.metadata or {}
-                    results.append({
-                        "content": doc.page_content,
-                        "metadata": meta,
-                        "collection": collection,
-                        "score": score,
-                        "date_text": format_date_relative(meta.get("date", ""))
-                    })
-
-            logger.info(f" 전체 검색 결과: {len(results)}개")
-
-            def boost_score_with_tags(result, query):
-                tags = result["metadata"].get("tags", [])
-                if any(tag in query for tag in tags):
-                    return result["score"] + 0.05
-                return result["score"]
-
-            filtered = [r for r in results if r["metadata"].get("authKeyId") == authKeyId]
-            logger.info(f" authKeyId 필터 후: {len(filtered)}개")
-
-            RELEVANCE_THRESHOLD = 0.3
-            relevant = [
-                r for r in filtered
-                if r["score"] is not None and r["score"] >= RELEVANCE_THRESHOLD
-            ]
-
-            for r in relevant:
-                original = r["score"]
-                r["boosted_score"] = boost_score_with_tags(r, query)
-                logger.info(f"[{r['collection']}] {r['metadata'].get('tags', [])} | {original:.4f} → {r['boosted_score']:.4f}")
-
-            sorted_relevant = sorted(relevant, key=lambda x: -x["boosted_score"])
-            return sorted_relevant[:3]
-
-        except Exception as e:
-            logger.error(f" 기억 검색 실패: {e}")
-            return []
-
-    async def store_memory(self, content: str, authKeyId: str, memory_type: str, **kwargs) -> Dict:
-        try:
-            metadata = {
-                "authKeyId": authKeyId,
-                "memory_type": memory_type,
-                "created_at": datetime.utcnow().isoformat()
-            }
-            for key in ["item_id", "item_type", "source", "date", "title", "tags", "collection"]:
-                if key in kwargs:
-                    metadata[key] = kwargs[key]
-
-            store = self._get_store_by_type(memory_type)
-            doc = Document(page_content=content, metadata=metadata)
-            await store.aadd_documents([doc])
-
-            logger.info(f" 기억 저장 완료: type={memory_type}")
-            return {"status": "stored", "collection": store.collection_name}
-
-        except Exception as e:
-            logger.error(f" 기억 저장 실패: {e}")
-            return {"status": "failed", "error": str(e)}
-
-    async def store_memory_with_metadata(
-        self,
-        id: str,
-        content: str,
-        page_content: str,
-        memory_type: str,
-        **metadata
-    ) -> Dict:
-        try:
-            metadata.update({
-                "id": id,
-                "memory_type": memory_type,
-                "created_at": datetime.utcnow().isoformat()
-            })
-
-            store = self._get_store_by_type(memory_type)
-            doc = Document(page_content=page_content, metadata=metadata)
-            await store.aadd_documents([doc])
-
-            logger.info(f" store_memory_with_metadata 완료: type={memory_type}")
-            return {"status": "stored", "collection": store.collection_name}
-
-        except Exception as e:
-            logger.error(f" store_memory_with_metadata 실패: {e}")
-            return {"status": "failed", "error": str(e)}
-
-    async def delete_memories_with_filter(self, collection_name: str, filter_condition: Dict) -> int:
-        try:
-            store = self._get_store_by_collection(collection_name)
-            await store.adelete(filter=filter_condition)
-            logger.info(f" Qdrant에서 삭제 완료: {collection_name} (조건: {filter_condition})")
-            return 1
-        except Exception as e:
-            logger.error(f" delete_memories_with_filter 실패: {e}")
-            return 0
 
     def _get_store_by_type(self, memory_type: str):
         if memory_type == "letter":
@@ -200,8 +84,107 @@ class AdvancedRAGService:
             return self.object_memory_store
         elif collection_name == settings.daily_conversation_collection:
             return self.daily_conversation_store
-        else:
-            raise ValueError(f"지원하지 않는 컬렉션 이름: {collection_name}")
+        raise ValueError(f" 지원하지 않는 컬렉션 이름: {collection_name}")
+
+    async def search_memories(self, query: str, authKeyId: str) -> List[Dict]:
+        try:
+            logger.info(f" RAG 검색 시작: query='{query}', authKeyId='{authKeyId}'")
+            query_vector = self.embeddings.embed_query(query)
+            all_results = []
+            TOP_K = 3
+            RELEVANCE_THRESHOLD = 0.3
+
+            def boost_score_with_tags(result, query):
+                tags = result["metadata"].get("tags", [])
+                return result["score"] + 0.05 if any(tag in query for tag in tags) else result["score"]
+
+            for mem_type, collection in self.collections.items():
+                search_result = self.qdrant_client.search(
+                    collection_name=collection,
+                    query_vector=query_vector,
+                    limit=15,
+                    search_params=SearchParams(hnsw_ef=64),
+                    with_payload=True
+                )
+                logger.info(f" {collection} 검색 결과: {len(search_result)}개")
+
+                filtered = []
+                for r in search_result:
+                    meta = r.payload or {}
+                    if meta.get("authKeyId") != authKeyId or r.score < RELEVANCE_THRESHOLD:
+                        continue
+                    item = {
+                        "content": meta.get("page_content", ""),
+                        "metadata": meta,
+                        "collection": mem_type,
+                        "score": r.score,
+                        "date_text": format_date_relative(meta.get("date", ""))
+                    }
+                    item["boosted_score"] = boost_score_with_tags(item, query)
+                    filtered.append(item)
+
+                top_k = sorted(filtered, key=lambda x: -x["boosted_score"])[:TOP_K]
+                for r in top_k:
+                    logger.info(f"[{r['collection']}] {r['metadata'].get('tags', [])} | {r['score']:.4f} → {r['boosted_score']:.4f}")
+                all_results.extend(top_k)
+
+            logger.info(f" 전체 선택된 결과: {len(all_results)}개")
+            return sorted(all_results, key=lambda x: -x["boosted_score"])[:TOP_K * len(self.collections)]
+
+        except Exception as e:
+            logger.error(f" 기억 검색 실패: {e}")
+            return []
+
+    async def store_memory(self, content: str, authKeyId: str, memory_type: str, **kwargs) -> Dict:
+        """간단한 기억 저장용 (텍스트만 저장 시)"""
+        try:
+            metadata = {
+                "authKeyId": authKeyId,
+                "memory_type": memory_type,
+                "created_at": datetime.utcnow().isoformat()
+            }
+            for key in ["item_id", "item_type", "source", "date", "title", "tags"]:
+                if key in kwargs:
+                    metadata[key] = kwargs[key]
+
+            store = self._get_store_by_type(memory_type)
+            doc = Document(page_content=content, metadata=metadata)
+            store.add_documents([doc])
+
+            logger.info(f" 기억 저장 완료: type={memory_type}")
+            return {"status": "stored", "collection": store.collection_name}
+        except Exception as e:
+            logger.error(f" 기억 저장 실패: {e}")
+            return {"status": "failed", "error": str(e)}
+
+    async def store_memory_with_metadata(self, id: str, content: str, page_content: str, memory_type: str, **metadata) -> Dict:
+        """ID를 포함한 전체 메타데이터 기억 저장 (주로 이미지/유품 등)"""
+        try:
+            metadata.update({
+                "id": id,
+                "memory_type": memory_type,
+                "created_at": datetime.utcnow().isoformat()
+            })
+            store = self._get_store_by_type(memory_type)
+            doc = Document(page_content=page_content, metadata=metadata)
+            store.add_documents([doc])
+
+            logger.info(f" store_memory_with_metadata 완료: type={memory_type}")
+            return {"status": "stored", "collection": store.collection_name}
+        except Exception as e:
+            logger.error(f" store_memory_with_metadata 실패: {e}")
+            return {"status": "failed", "error": str(e)}
+
+    async def delete_memories_with_filter(self, collection_name: str, filter_condition: Dict) -> int:
+        try:
+            store = self._get_store_by_collection(collection_name)
+            await store.adelete(filter=filter_condition)
+            logger.info(f" Qdrant에서 삭제 완료: {collection_name} (조건: {filter_condition})")
+            return 1
+        except Exception as e:
+            logger.error(f" delete_memories_with_filter 실패: {e}")
+            return 0
 
 
+# 전역 인스턴스
 advanced_rag_service = AdvancedRAGService()

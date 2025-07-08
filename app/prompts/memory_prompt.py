@@ -24,7 +24,7 @@ def get_keepsake_memory_prompt(keepsake_data: Dict, deceased_info: Dict) -> str:
 
 예시:
 기억: 이 작은 필통은 엄마가 중학생 때 쓰시던 거래. 낡았지만 안쪽엔 엄마 글씨로 이름이 적혀 있어. 책상 위에 두면 항상 옆에 있는 느낌이 들어서 자주 들여다보곤 해.
-태그: 필통, 이름, 엄마, 책상
+태그: 필통, 이름, 엄마, 책상 (태그 맨앞에 [유품] 무조건 포함)
 """
 
 def get_photo_memory_prompt(photo_data: Dict, deceased_info: Dict) -> str:
@@ -46,5 +46,5 @@ def get_photo_memory_prompt(photo_data: Dict, deceased_info: Dict) -> str:
 
 예시:
 기억: 이 사진은 엄마가 생일날 미역국을 끓여주시던 장면이야. 양옆에 있는 가족들이 다 함께 웃고 있었던 기억이 나. 엄마는 그날 하늘색 앞치마를 입고 있었고, 사진을 찍을 때 ‘웃어~’ 하고 외치셨지.
-태그: 생일, 엄마, 미역국, 앞치마, 웃음
+태그: 생일, 엄마, 미역국, 앞치마, 웃음(태그 맨앞에 [사진] 무조건 포함)
 """

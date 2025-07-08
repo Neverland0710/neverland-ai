@@ -79,7 +79,7 @@ class ResponseParser:
     """GPT 응답 파싱 및 포맷팅"""
     
     MAX_RESPONSE_LENGTH = 300
-    METADATA_PREFIXES = ('요약:', '태그:', '분위기:', '위험도:', '분석:')
+    METADATA_PREFIXES = ('요약:', '위험도:', '분석:')
     
     def __call__(self, text: Any) -> Dict[str, Any]:
         if isinstance(text, AIMessage):
