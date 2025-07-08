@@ -2,6 +2,8 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from datetime import datetime, timedelta
 import uuid
+import re
+from typing import Tuple, List
 
 from app.utils.logger import logger
 from app.services.database_service import database_service
@@ -34,6 +36,18 @@ class SchedulerService:
         except Exception as e:
             logger.error(f" 스케줄러 종료 실패: {e}")
 
+    def parse_summary_and_tags(self, response_text: str) -> Tuple[str, List[str]]:
+        summary_match = re.search(r"요약\s*:\s*(.*?)\n", response_text, re.DOTALL)
+        tags_match = re.search(r"태그\s*:\s*(.*)", response_text)
+
+        summary = summary_match.group(1).strip() if summary_match else response_text.strip()
+        tags_str = tags_match.group(1).strip() if tags_match else ""
+        tags = [t.strip() for t in tags_str.split(",") if t.strip()]
+        return summary, tags
+
+    def build_vector_text(self, summary: str, tags: List[str]) -> str:
+        return f"[태그: {', '.join(tags)}]\n{summary}" if tags else summary
+
     async def daily_summary_job(self):
         try:
             logger.info(" 일일 요약 작업 시작")
@@ -62,7 +76,10 @@ class SchedulerService:
                     dialogue=dialogue
                 )
                 response = await self.llm.ainvoke([{"role": "user", "content": prompt}])
-                summary = response.content.strip()
+                full_text = response.content.strip()
+
+                summary, tags = self.parse_summary_and_tags(full_text)
+                vector_text = self.build_vector_text(summary, tags)
 
                 itemId = f"summary_{yesterday}"
                 uniqueId = f"{authKeyId}_{itemId}_{uuid.uuid4().hex[:6]}"
@@ -75,12 +92,13 @@ class SchedulerService:
                     "memoryType": "summary",
                     "date": yesterday,
                     "createdAt": createdAt,
-                    "source": "daily_summary"
+                    "source": "daily_summary",
+                    "tags": tags
                 }
 
                 await advanced_rag_service.store_memory_with_metadata(
                     id=uniqueId,
-                    content=summary,
+                    content=vector_text,
                     page_content=summary,
                     memory_type="daily",
                     **metadata

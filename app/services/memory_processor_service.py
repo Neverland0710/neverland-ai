@@ -1,8 +1,3 @@
-# app/services/memory_processor_service.py
-"""
-기억 변환 서비스 - 유품, 사진 전용 변환 + Qdrant 저장
-"""
-
 from typing import Tuple, List, Dict
 from uuid import uuid4
 from datetime import datetime, timezone, timedelta
@@ -13,17 +8,14 @@ from app.services.advanced_rag_service import advanced_rag_service
 from app.utils.logger import logger
 from app.config import settings
 
-
 # 한국 시간대
 KST = timezone(timedelta(hours=9))
-
 def now_kst():
     return datetime.now(KST)
 
 def generate_item_id(item_type: str) -> str:
     """itemId = photo_20250707_a1b2c3 형식 생성"""
     return f"{item_type}_{now_kst().strftime('%Y%m%d')}_{uuid4().hex[:6]}"
-
 
 class MemoryProcessorService:
     def __init__(self):
@@ -99,7 +91,7 @@ class MemoryProcessorService:
         itemId = generate_item_id(itemType)
         createdAt = now_kst().isoformat()
 
-        #  벡터화될 텍스트 앞에 태그를 포함시킴
+        #  벡터화용 텍스트 (태그 포함)
         tag_prefix = f"[태그: {', '.join(tags)}]" if tags else ""
         vector_text = f"{tag_prefix}\n{memoryText}".strip()
 
@@ -112,15 +104,16 @@ class MemoryProcessorService:
             "date": createdAt[:10],
             "createdAt": createdAt,
             "sourceText": sourceText,
-            "tags": tags 
+            "tags": tags
         }
 
         await advanced_rag_service.upsert_document(
             collection_name="memories",
             document={
-                "page_content": vector_text,
+                "page_content": memoryText,  
                 "metadata": metadata
-            }
+            },
+            vector_override=vector_text  
         )
 
         return itemId
