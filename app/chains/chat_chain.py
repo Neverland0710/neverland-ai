@@ -17,6 +17,10 @@ from app.services.advanced_rag_service import advanced_rag_service
 from app.services.database_service import database_service
 from app.prompts.chat_prompt import ChatPrompts
 from app.models.conversation import TextConversation
+from datetime import datetime, timezone, timedelta
+
+KST = timezone(timedelta(hours=9))
+
 # LangSmith 설정
 try:
     from langsmith import traceable
@@ -168,7 +172,7 @@ class ChatChain:
                 authKeyId=authKeyId,
                 sender="USER",
                 message=user_input,
-                metadata={"sent_at": datetime.now().isoformat()}
+                metadata={"sent_at": datetime.now(KST).isoformat()}  # ← 수정
             )
             input_data = {
                 "input": user_input,
@@ -199,9 +203,8 @@ class ChatChain:
                 authKeyId=authKeyId,
                 sender="CHATBOT",
                 message=response,
-                metadata={"sent_at": datetime.now().isoformat()}
+                metadata={"sent_at": datetime.now(KST).isoformat()}  # ← 수정
             )
-
             if not response:
                 logger.warning("GPT 응답이 비어있음 또는 파싱 실패 → fallback 응답 반환")
                 return {

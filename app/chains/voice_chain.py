@@ -18,6 +18,10 @@ from app.services.advanced_rag_service import advanced_rag_service
 from app.services.database_service import database_service
 from app.prompts.voice_prompt import VoicePrompts
 from app.models.conversation import TextConversation
+from datetime import datetime, timezone, timedelta
+
+KST = timezone(timedelta(hours=9))
+
 
 try:
     from langsmith import traceable
@@ -530,7 +534,7 @@ class VoiceChain:
                 authKeyId=authKeyId,
                 sender="USER",
                 message=user_speech,
-                metadata={"sent_at": user_time.isoformat()}
+                metadata={"sent_at": datetime.now(KST).isoformat()}
             )
 
             # 챗봇 응답은 백그라운드 저장
@@ -539,7 +543,7 @@ class VoiceChain:
                     authKeyId=authKeyId,
                     sender="CHATBOT",
                     message=ai_response,
-                    metadata={"sent_at": bot_time.isoformat()}
+                    metadata={"sent_at": datetime.now(KST).isoformat()}
                 )
             )
 
