@@ -108,18 +108,23 @@ class ResponseParser:
         }
     
     def _extract_response(self, text: str) -> str:
-        """실제 대화 응답 추출"""
-        # 1. 첫 번째 줄에서 메타데이터가 아닌 실제 대화 찾기
+        """[대답]: 포함 응답 파싱 (GPT 출력 형식 대응)"""
         lines = text.strip().split('\n')
+
+        # 0. [대답]: 키워드 기반 우선 파싱
+        for line in lines:
+            if line.strip().startswith("[대답]:"):
+                return line.strip().replace("[대답]:", "").strip().strip('"')
+
+        # 1. 일반 메타데이터 필터 기반
         for line in lines:
             line = line.strip()
             if line and not line.startswith(self.METADATA_PREFIXES):
-                # 따옴표 제거
                 if line.startswith('"') and line.endswith('"'):
                     return line[1:-1]
                 return line
-        
-        # 2. | 구분자 방식 파싱
+
+        # 2. | 구분자 기반
         if "|" in text:
             try:
                 response = text.strip().split("|")[0].strip()
@@ -128,24 +133,24 @@ class ResponseParser:
                     return response
             except Exception as e:
                 logger.warning(f" '|' 파싱 실패: {e}")
-        
-        # 3. 라인별 파싱
+
+        # 3. "응답 내용:" 키워드
         for line in lines:
             if "응답 내용:" in line:
                 response = line.split("응답 내용:", 1)[1].strip().strip("'\"")
                 if response:
                     return response
-        
-        # 4. 첫 문장 사용 (GPT가 뭔가 응답했다면)
+
+        # 4. 첫 문장 fallback
         first_sentence = text.split('.')[0].strip()
         if first_sentence and len(first_sentence) > 5:
             return first_sentence
-            
-        # 5. GPT 응답 전체를 사용 (파싱 실패했지만 뭔가 답변이 있다면)
+
+        # 5. 전체 사용 fallback
         if text.strip() and len(text.strip()) > 10:
             return text.strip()
-            
-        # 6. 정말 마지막 수단으로만 기본 응답 (GPT가 아예 응답 안했을 때만)
+
+        # 6. 마지막 fallback
         logger.warning(" GPT 응답이 비어있거나 너무 짧음 - 기본 메시지 사용")
         return "안녕하세요! 무엇을 도와드릴까요?"
     
