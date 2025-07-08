@@ -1,10 +1,9 @@
 # chains/voice_chain.py
 from typing import Dict, List, Any, Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 import os
 import asyncio
 import re
-from datetime import datetime, timedelta
 
 from langchain_openai import ChatOpenAI
 from langchain.schema.runnable import Runnable, RunnablePassthrough, RunnableLambda
@@ -19,7 +18,7 @@ from app.services.advanced_rag_service import advanced_rag_service
 from app.services.database_service import database_service
 from app.prompts.voice_prompt import VoicePrompts
 from app.models.conversation import TextConversation
-# LangSmith 설정
+
 try:
     from langsmith import traceable
     os.environ["LANGCHAIN_TRACING_V2"] = "true"
@@ -28,8 +27,7 @@ try:
     os.environ["LANGCHAIN_PROJECT"] = settings.langsmith_project
 except ImportError:
     def traceable(name=None):
-        def decorator(func): 
-            return func
+        def decorator(func): return func
         return decorator
 
 
@@ -521,26 +519,31 @@ class VoiceChain:
             return []
 
     async def _save_voice_conversation(self, authKeyId: str, user_speech: str, ai_response: str):
-        """음성 대화 저장 (비동기)"""
+        """음성 대화 저장 (사용자 입력은 await, 응답은 create_task로 백그라운드 저장)"""
         try:
             now = datetime.now()
             user_time = now
-            bot_time = now + timedelta(milliseconds=10)  # 10ms 차이
+            bot_time = now + timedelta(milliseconds=10)
 
+            # 사용자 발화는 즉시 저장 (await)
             await database_service.save_conversation(
                 authKeyId=authKeyId,
                 sender="USER",
                 message=user_speech,
                 metadata={"sent_at": user_time.isoformat()}
             )
-            await database_service.save_conversation(
-                authKeyId=authKeyId,
-                sender="CHATBOT",
-                message=ai_response,
-                metadata={"sent_at": bot_time.isoformat()}
+
+            # 챗봇 응답은 백그라운드 저장
+            asyncio.create_task(
+                database_service.save_conversation(
+                    authKeyId=authKeyId,
+                    sender="CHATBOT",
+                    message=ai_response,
+                    metadata={"sent_at": bot_time.isoformat()}
+                )
             )
 
-            logger.debug(" 음성 대화 저장 완료")
+            logger.debug(" 음성 대화 저장 완료 (USER await, CHATBOT 비동기)")
 
         except Exception as e:
             logger.error(f" 음성 대화 저장 실패: {e}")
