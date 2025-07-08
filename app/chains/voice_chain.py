@@ -522,20 +522,22 @@ class VoiceChain:
     async def _save_voice_conversation(self, authKeyId: str, user_speech: str, ai_response: str):
         """음성 대화 저장 (비동기)"""
         try:
-            await TextConversation.save_message(
-                authKeyId=authKeyId, 
-                sender="USER", 
-                message=user_speech
+            now = datetime.now().isoformat()
+            await database_service.save_conversation(
+                authKeyId=authKeyId,
+                sender="USER",
+                message=user_speech,
+                metadata={"sent_at": now}
             )
-            await TextConversation.save_message(
-                authKeyId=authKeyId, 
-                sender="CHATBOT", 
-                message=ai_response
+            await database_service.save_conversation(
+                authKeyId=authKeyId,
+                sender="CHATBOT",
+                message=ai_response,
+                metadata={"sent_at": now}
             )
             logger.debug(" 음성 대화 저장 완료")
         except Exception as e:
             logger.error(f" 음성 대화 저장 실패: {e}")
-
 
 # 글로벌 인스턴스
 voice_chain = VoiceChain()

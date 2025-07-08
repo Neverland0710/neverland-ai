@@ -164,12 +164,12 @@ class ChatChain:
             session_history = self._get_session_history(authKeyId)
             await session_history._load_messages()
 
-            await TextConversation.save_message(
+            await database_service.save_conversation(
                 authKeyId=authKeyId,
                 sender="USER",
-                message=user_input
+                message=user_input,
+                metadata={"sent_at": datetime.now().isoformat()}
             )
-
             input_data = {
                 "input": user_input,
                 "user_input": user_input,
@@ -195,10 +195,11 @@ class ChatChain:
             analysis = self.response_parser._extract_analysis(parsed.content)
             risk = self.response_parser._extract_risk(parsed.content)
 
-            await TextConversation.save_message(
+            await database_service.save_conversation(
                 authKeyId=authKeyId,
                 sender="CHATBOT",
-                message=response
+                message=response,
+                metadata={"sent_at": datetime.now().isoformat()}
             )
 
             if not response:
