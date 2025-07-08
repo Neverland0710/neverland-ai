@@ -28,7 +28,7 @@ python-dotenv
 
 # 스케줄링 및 캐싱
 apscheduler
-
+dateutil
 # 파일 처리
 aiofiles
 pillow
