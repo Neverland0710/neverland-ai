@@ -12,7 +12,7 @@ class LetterPrompts:
 - 아래 기억은 유족({user_name})의 회상이며, 고인({deceased_name})의 직접 기억이 아닙니다.
 - 사실처럼 꾸미지 마시고, 발화와 연결될 경우에만 자연스럽게 반영하세요.
 
-기억 등록일: {date_text}  
+기억 등록일: {date_text}
 유족의 기억 내용:  
 {memory_context}
 
