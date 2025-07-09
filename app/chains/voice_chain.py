@@ -525,25 +525,25 @@ class VoiceChain:
     async def _save_voice_conversation(self, authKeyId: str, user_speech: str, ai_response: str):
         """음성 대화 저장 (사용자 입력은 await, 응답은 create_task로 백그라운드 저장)"""
         try:
-            now = datetime.now()
+            now = datetime.now(KST)
             user_time = now
-            bot_time = now + timedelta(milliseconds=10)
+            bot_time = now + timedelta(seconds=1)  # 👈 여기서 시간 차이를 명시함
 
-            # 사용자 발화는 즉시 저장 (await)
+            # USER 저장 (동기)
             await database_service.save_conversation(
                 authKeyId=authKeyId,
                 sender="USER",
                 message=user_speech,
-                metadata={"sent_at": datetime.now(KST).isoformat()}
+                metadata={"sent_at": user_time.isoformat()}
             )
 
-            # 챗봇 응답은 백그라운드 저장
+            # CHATBOT 저장 (비동기 + 시간차)
             asyncio.create_task(
                 database_service.save_conversation(
                     authKeyId=authKeyId,
                     sender="CHATBOT",
                     message=ai_response,
-                    metadata={"sent_at": datetime.now(KST).isoformat()}
+                    metadata={"sent_at": bot_time.isoformat()}
                 )
             )
 
@@ -551,6 +551,7 @@ class VoiceChain:
 
         except Exception as e:
             logger.error(f" 음성 대화 저장 실패: {e}")
+
 
 # 글로벌 인스턴스
 voice_chain = VoiceChain()
